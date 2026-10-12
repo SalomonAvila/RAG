@@ -20,7 +20,10 @@ QDRANT_COLLECTION = os.getenv("QDRANT_COLLECTION", "rag_docs")
 
 OLLAMA_URL = os.getenv("OLLAMA_URL", "http://localhost:11434")
 EMBED_MODEL = os.getenv("EMBED_MODEL", "nomic-embed-text")
-LLM_MODEL = os.getenv("LLM_MODEL", "qwen2.5:3b")
+LLM_MODEL = os.getenv("LLM_MODEL", "qwen2.5:7b")
+
+# Umbral mínimo de similitud para descartar fragmentos irrelevantes
+SCORE_THRESHOLD = float(os.getenv("SCORE_THRESHOLD", "0.58"))
 
 # nomic-embed-text está entrenado con prefijos de tarea; usarlos mejora la búsqueda.
 DOC_PREFIX = "search_document: "

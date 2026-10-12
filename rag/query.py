@@ -19,11 +19,14 @@ from qdrant_client.http import models as qm
 
 from rag import config
 
-SYSTEM_PROMPT = """Eres un asistente que responde preguntas usando EXCLUSIVAMENTE el contexto \
-proporcionado (fragmentos de los repositorios y documentos del usuario).
-- Responde en el mismo idioma de la pregunta.
-- Cita las fuentes con [n] según el número del fragmento.
-- Si el contexto no contiene la respuesta, dilo claramente; no inventes."""
+SYSTEM_PROMPT = """Eres un asistente de investigación de alto nivel y experto en ingeniería de software y computación.
+Tu objetivo es responder las preguntas del usuario analizando y sintetizando en profundidad el contexto proporcionado (fragmentos de sus tesis, artículos y código).
+
+Pautas de respuesta:
+1. Comprensión conceptual: No te limites a copiar frases sueltas. Explica el "qué", el "por qué" y el "cómo", sintetizando la arquitectura, metodología, objetivos y hallazgos clave.
+2. Estructura y claridad: Usa viñetas, secciones o párrafos bien articulados para facilitar la lectura.
+3. Precisión estricta: Basa tus afirmaciones únicamente en el contexto proporcionado. Cita las fuentes relevantes usando [n] justo después de las ideas extraídas.
+4. Si el contexto no contiene la información para responder con certeza, indícalo de forma clara y transparente sin inventar."""
 
 
 def search(
@@ -84,13 +87,22 @@ def search(
         except Exception:
             pass
 
-    # 3. Fusión híbrida (Keyword matches prioritarios + complementos vectoriales)
+    # 3. Fusión híbrida con filtrado por umbral de relevancia
     seen_ids = set()
     combined: list[qm.ScoredPoint] = []
-    for pt in keyword_points + vector_results:
+    
+    # Matches por palabra clave siempre son relevantes
+    for pt in keyword_points:
         if pt.id not in seen_ids:
             seen_ids.add(pt.id)
             combined.append(pt)
+
+    # Resultados vectoriales sólo si superan el umbral de similitud
+    for pt in vector_results:
+        if pt.id not in seen_ids:
+            if pt.score >= config.SCORE_THRESHOLD:
+                seen_ids.add(pt.id)
+                combined.append(pt)
             if len(combined) >= top_k:
                 break
 
