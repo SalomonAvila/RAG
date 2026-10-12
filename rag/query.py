@@ -233,18 +233,40 @@ EXPANSION: [términos y componentes separados por espacio]"""
         points_by_id[pt.id] = pt
 
     sorted_ranks = sorted(rrf_scores.items(), key=lambda x: x[1], reverse=True)
+    if not sorted_ranks:
+        return []
+
+    # Selección Dinámica Automática de Fuentes:
+    # En lugar de fijar ciegamente un número fijo (como 7), detectamos cuántos fragmentos
+    # son genuinamente relevantes para esta consulta específica según la caída de puntuación.
+    max_score = sorted_ranks[0][1]
+    min_k = min(3, len(sorted_ranks))
+    max_k = top_k
+
     combined: list[qm.ScoredPoint] = []
-    for pid, rrf_sc in sorted_ranks[:top_k]:
-        orig = points_by_id[pid]
-        combined.append(
-            qm.ScoredPoint(
-                id=orig.id,
-                version=0,
-                score=rrf_sc,
-                payload=orig.payload,
-                vector=None
+    prev_score = max_score
+
+    for i, (pid, rrf_sc) in enumerate(sorted_ranks[:max_k]):
+        ratio = rrf_sc / max_score if max_score > 0 else 1.0
+        gap = (prev_score - rrf_sc) / prev_score if prev_score > 0 else 0.0
+
+        # Mantener si estamos dentro del mínimo o si conserva alta relevancia relativa (>=70%)
+        # sin caídas bruscas (>25% de salto entre posiciones consecutivas).
+        if i < min_k or (ratio >= 0.70 and gap < 0.25):
+            orig = points_by_id[pid]
+            combined.append(
+                qm.ScoredPoint(
+                    id=orig.id,
+                    version=0,
+                    score=rrf_sc,
+                    payload=orig.payload,
+                    vector=None
+                )
             )
-        )
+            prev_score = rrf_sc
+        else:
+            break
+
     return combined
 
 
