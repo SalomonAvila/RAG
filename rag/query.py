@@ -136,11 +136,11 @@ Consulta del usuario: "{question}"
 
 Instrucciones:
 1. Determina qué archivo(s) del catálogo tienen relación directa con la consulta. Si la consulta es transversal, general o no menciona un tema específico, responde 'TODOS'.
-2. Genera de 4 a 8 conceptos clave, sinónimos formales y términos técnicos con los que suele estar escrita la información correspondiente en los documentos (considerando tanto aspectos de cursos/evaluación/metodología como conceptos técnicos/arquitectura si aplica).
+2. Genera de 6 a 12 términos clave, sinónimos y componentes específicos con los que esta información suele estar redactada en los documentos fuente (por ejemplo: si pregunta por calificación o evaluación de cursos, incluye los componentes típicos como parciales, quices, talleres, proyectos, porcentajes, ponderación, notas; si pregunta por arquitectura de software, incluye módulos, servicios, contratos, diagramas; si pregunta por investigación académica o tesis, incluye objetivos, hipótesis, metodología, métricas).
 
 Responde ÚNICAMENTE en este formato exacto:
 DOCS: [archivos seleccionados separados por coma, o 'TODOS']
-EXPANSION: [términos y sinónimos separados por espacio]"""
+EXPANSION: [términos y componentes separados por espacio]"""
 
             resp = llm.chat(
                 model=config.LLM_MODEL,

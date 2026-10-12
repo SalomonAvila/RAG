@@ -31,6 +31,9 @@ ssh -F /dev/null -o BatchMode=yes -f -N \
 
 TUNNEL_PID=$(pgrep -f "ssh.*-L $PORT_QDRANT:localhost:$PORT_QDRANT.*$REMOTE_HOST" | tail -1)
 
+# Asegurar que no haya servidores antiguos en el puerto 7860
+fuser -k 7860/tcp 2>/dev/null || true
+
 # Iniciar servidor backend en segundo plano
 uv run python -m rag.server &
 SERVER_PID=$!
@@ -39,6 +42,7 @@ cleanup() {
   echo ""
   echo "🔌 Cerrando aplicación y túnel..."
   kill $SERVER_PID 2>/dev/null || true
+  fuser -k 7860/tcp 2>/dev/null || true
   kill $TUNNEL_PID 2>/dev/null || true
 }
 trap cleanup EXIT INT TERM
