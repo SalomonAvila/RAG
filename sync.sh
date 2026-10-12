@@ -21,7 +21,8 @@ rsync -avzP \
 echo ""
 echo "⚡ 2. Ejecutando indexación incremental en el servidor homelab..."
 ssh -F /dev/null -o BatchMode=yes "$REMOTE_USER@$REMOTE_HOST" \
-  "cd $REMOTE_REPO && uv run cocoindex update rag.indexer"
+  "cd $REMOTE_REPO && git pull origin main >/dev/null 2>&1 || true; uv run cocoindex update rag.indexer"
+
 
 echo ""
 echo "✅ ¡Listo! Documentos sincronizados e indexados en Qdrant."

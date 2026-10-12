@@ -48,6 +48,7 @@ class QueryRequest(BaseModel):
     question: str
     source: str | None = None
     top_k: int = 7
+    messages: list[dict[str, str]] | None = None
 
 
 @app.get("/")
@@ -94,12 +95,23 @@ async def api_chat(req: QueryRequest):
             return
 
         context_str = "\n\n---\n\n".join(context_blocks)
-        messages = [
-            {"role": "system", "content": SYSTEM_PROMPT},
-            {"role": "user", "content": f"Contexto:\n\n{context_str}\n\nPregunta: {req.question}"},
-        ]
+        prompt_user = f"Contexto de documentos recuperados:\n\n{context_str}\n\nPregunta actual: {req.question}"
+
+        messages = [{"role": "system", "content": SYSTEM_PROMPT}]
+
+        # Incluir historial previo de la conversación si existe (hasta los últimos 6 turnos para mantener foco)
+        if req.messages:
+            prev_turns = req.messages[-6:]
+            for m in prev_turns:
+                role = m.get("role", "user")
+                content = m.get("content", "")
+                if role in ("user", "assistant") and content:
+                    messages.append({"role": role, "content": content})
+
+        messages.append({"role": "user", "content": prompt_user})
 
         # 2. Transmitir token a token en tiempo real mientras el LLM los produce
+
         for part in llm.chat(model=config.LLM_MODEL, messages=messages, stream=True):
             token_text = part.message.content
             yield f"data: {json.dumps({'type': 'token', 'text': token_text})}\n\n"

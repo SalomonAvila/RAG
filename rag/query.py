@@ -29,6 +29,79 @@ Pautas de respuesta:
 4. Si el contexto no contiene la información para responder con certeza, indícalo de forma clara y transparente sin inventar."""
 
 
+def _extract_tokens(text: str) -> list[str]:
+    import re
+    import unicodedata
+
+    # Separar palabras concatenadas (camelCase / PascalCase)
+    text = re.sub(r"([a-z])([A-Z])", r"\1 \2", text)
+    # Reemplazar símbolos, rutas y extensiones por espacios
+    text = re.sub(r"[\/\\\-_.]", " ", text)
+    text = "".join(
+        c for c in unicodedata.normalize("NFD", text.lower())
+        if unicodedata.category(c) != "Mn"
+    )
+    # Stopwords comunes
+    stopwords = {
+        "para", "como", "esta", "sobre", "entre", "donde", "cuando", "quien",
+        "cual", "este", "estos", "estas", "unos", "unas", "tener", "hacer", "decir"
+    }
+    return [w for w in re.findall(r"\b[a-z0-9]+\b", text) if len(w) >= 3 and w not in stopwords]
+
+
+_cached_corpus: list[tuple[qm.Record, list[str]]] | None = None
+_cached_df: dict[str, int] = {}
+_cached_paths: list[str] = []
+_last_corpus_time: float = 0.0
+
+
+def _get_corpus(qdrant: QdrantClient) -> tuple[list[tuple[qm.Record, list[str]]], dict[str, int], list[str]]:
+    global _cached_corpus, _cached_df, _cached_paths, _last_corpus_time
+    import time
+
+    now = time.time()
+    if _cached_corpus is not None and (now - _last_corpus_time) < 45.0:
+        return _cached_corpus, _cached_df, _cached_paths
+
+    # Recorrer colección completa para BM25 y catálogo de rutas
+    all_points = []
+    offset = None
+    paths_set = set()
+
+    while True:
+        pts, offset = qdrant.scroll(
+            collection_name=config.QDRANT_COLLECTION,
+            limit=250,
+            offset=offset,
+            with_payload=True,
+        )
+        for p in pts:
+            all_points.append(p)
+            if p.payload and "path" in p.payload:
+                paths_set.add(p.payload["path"])
+        if offset is None:
+            break
+
+    doc_corpus = []
+    df: dict[str, int] = {}
+    for p in all_points:
+        payload = p.payload or {}
+        p_path = payload.get("path", "")
+        p_text = payload.get("text", "")
+        # Se pondera la ruta para que menciones a carpetas, temas o autores pesen naturalmente
+        content = f"{p_path} {p_path} {p_text}"
+        toks = _extract_tokens(content)
+        doc_corpus.append((p, toks))
+        for t in set(toks):
+            df[t] = df.get(t, 0) + 1
+
+    _cached_corpus = doc_corpus
+    _cached_df = df
+    _cached_paths = sorted(paths_set)
+    _last_corpus_time = now
+    return _cached_corpus, _cached_df, _cached_paths
+
+
 def search(
     qdrant: QdrantClient,
     llm: ollama.Client,
@@ -37,76 +110,143 @@ def search(
     top_k: int,
     source: str | None,
 ) -> list[qm.ScoredPoint]:
-    # 1. Búsqueda vectorial semántica (densa)
-    vector = llm.embed(model=config.EMBED_MODEL, input=config.QUERY_PREFIX + question).embeddings[0]
+    """
+    Búsqueda Híbrida Universal de 2 Fases:
+    1. Análisis Semántico y Enrutamiento Universal: Identifica si la consulta apunta a archivos
+       específicos del catálogo y complementa con sinónimos formales o académicos (sin reglas fijas).
+    2. Fusión Equilibrada RRF (Reciprocal Rank Fusion): Combina búsqueda densa vectorial y
+       búsqueda léxica BM25 (en ruta y contenido) calibrada para no sesgar ni descartar aciertos exactos.
+    """
+    import math
+
+    doc_corpus, df, distinct_paths = _get_corpus(qdrant)
+
+    # 1. Enrutamiento y expansión semántica universal con el LLM
+    routed_paths: list[str] = []
+    expanded_query = question
+
+    if distinct_paths:
+        try:
+            catalog_str = "\n".join(f"- {p}" for p in distinct_paths)
+            router_prompt = f"""Eres el analizador inteligente de consultas de un motor de búsqueda sobre documentos técnicos, diapositivas, artículos y código.
+Catálogo de documentos disponibles:
+{catalog_str}
+
+Consulta del usuario: "{question}"
+
+Instrucciones:
+1. Determina qué archivo(s) del catálogo tienen relación directa con la consulta. Si la consulta es transversal, general o no menciona un tema específico, responde 'TODOS'.
+2. Genera de 4 a 8 conceptos clave, sinónimos formales y términos técnicos con los que suele estar escrita la información correspondiente en los documentos (considerando tanto aspectos de cursos/evaluación/metodología como conceptos técnicos/arquitectura si aplica).
+
+Responde ÚNICAMENTE en este formato exacto:
+DOCS: [archivos seleccionados separados por coma, o 'TODOS']
+EXPANSION: [términos y sinónimos separados por espacio]"""
+
+            resp = llm.chat(
+                model=config.LLM_MODEL,
+                messages=[{"role": "user", "content": router_prompt}]
+            )
+            content = resp.message.content.strip()
+            for line in content.splitlines():
+                if line.startswith("DOCS:"):
+                    docs_part = line.replace("DOCS:", "").strip()
+                    if "TODOS" not in docs_part.upper():
+                        for raw_name in docs_part.split(","):
+                            clean_name = raw_name.strip().lstrip("- ")
+                            for dp in distinct_paths:
+                                if clean_name and (clean_name in dp or dp.endswith(clean_name)):
+                                    routed_paths.append(dp)
+                elif line.startswith("EXPANSION:"):
+                    exp_part = line.replace("EXPANSION:", "").strip()
+                    if exp_part:
+                        expanded_query = f"{question} {exp_part}"
+        except Exception:
+            pass
+
+    # 2. Búsqueda Vectorial Semántica
+    search_vector = llm.embed(
+        model=config.EMBED_MODEL,
+        input=config.QUERY_PREFIX + expanded_query
+    ).embeddings[0]
+
     base_filter = (
         qm.Filter(must=[qm.FieldCondition(key="source", match=qm.MatchValue(value=source))])
         if source
         else None
     )
+
+    candidate_depth = max(top_k * 5, 40)
     vector_results = qdrant.query_points(
         collection_name=config.QDRANT_COLLECTION,
-        query=vector,
+        query=search_vector,
         query_filter=base_filter,
-        limit=max(top_k * 2, 10),
+        limit=candidate_depth,
         with_payload=True,
     ).points
 
-    # 2. Búsqueda por palabras clave relevantes (nombres propios, términos específicos en ruta o contenido)
-    import re
-    # Palabras de más de 3 letras ignorando stopwords comunes
-    STOPWORDS = {"para", "como", "esta", "sobre", "entre", "donde", "cuando", "quien", "cual", "trata", "tesis"}
-    tokens = [w for w in re.findall(r"\b\w+\b", question) if len(w) >= 4 and w.lower() not in STOPWORDS]
+    # 3. Búsqueda Léxica BM25
+    query_tokens = _extract_tokens(expanded_query)
+    N = len(doc_corpus)
+    avg_len = sum(len(toks) for _, toks in doc_corpus) / N if N > 0 else 1.0
+    k1, b = 1.5, 0.75
+    bm25_scores = []
 
-    keyword_points: list[qm.ScoredPoint] = []
-    if tokens:
-        should_conditions = []
-        for token in tokens[:4]:  # tomar hasta las 4 palabras más distintivas
-            should_conditions.append(qm.FieldCondition(key="path", match=qm.MatchText(text=token)))
-            should_conditions.append(qm.FieldCondition(key="text", match=qm.MatchText(text=token)))
+    for p, toks in doc_corpus:
+        payload = p.payload or {}
+        if source and payload.get("source") != source:
+            continue
 
-        kw_filter = qm.Filter(should=should_conditions)
-        if base_filter:
-            kw_filter = qm.Filter(must=base_filter.must, should=should_conditions)
+        freqs = {}
+        for t in toks:
+            freqs[t] = freqs.get(t, 0) + 1
+        score = 0.0
+        for qt in query_tokens:
+            if qt in freqs:
+                tf = freqs[qt]
+                n_t = df.get(qt, 0)
+                idf = math.log((N - n_t + 0.5) / (n_t + 0.5) + 1.0)
+                num = tf * (k1 + 1.0)
+                den = tf + k1 * (1.0 - b + b * (len(toks) / avg_len))
+                score += idf * (num / den)
 
-        try:
-            kw_matches, _ = qdrant.scroll(
-                collection_name=config.QDRANT_COLLECTION,
-                limit=top_k,
-                scroll_filter=kw_filter,
-                with_payload=True,
-            )
-            for m in kw_matches:
-                keyword_points.append(qm.ScoredPoint(
-                    id=m.id,
-                    version=0,
-                    score=1.0,  # Match directo por palabra clave
-                    payload=m.payload,
-                    vector=None
-                ))
-        except Exception:
-            pass
+        if routed_paths and payload.get("path") in routed_paths:
+            score *= 1.8
 
-    # 3. Fusión híbrida con filtrado por umbral de relevancia
-    seen_ids = set()
+        if score > 0:
+            bm25_scores.append((score, p))
+
+    bm25_scores.sort(key=lambda x: x[0], reverse=True)
+    bm25_results = [p for _, p in bm25_scores[:candidate_depth]]
+
+    # 4. Fusión de Rangos Recíprocos Equilibrada (RRF calibrado con k=15)
+    rrf_scores: dict[str, float] = {}
+    points_by_id: dict[str, qm.ScoredPoint] = {}
+
+    for rank, pt in enumerate(vector_results):
+        boost = 1.6 if (routed_paths and pt.payload.get("path") in routed_paths) else 1.0
+        rrf_scores[pt.id] = rrf_scores.get(pt.id, 0.0) + (boost / (15.0 + rank + 1.0))
+        points_by_id[pt.id] = pt
+
+    for rank, pt in enumerate(bm25_results):
+        boost = 1.6 if (routed_paths and pt.payload.get("path") in routed_paths) else 1.0
+        rrf_scores[pt.id] = rrf_scores.get(pt.id, 0.0) + (boost / (15.0 + rank + 1.0))
+        points_by_id[pt.id] = pt
+
+    sorted_ranks = sorted(rrf_scores.items(), key=lambda x: x[1], reverse=True)
     combined: list[qm.ScoredPoint] = []
-    
-    # Matches por palabra clave siempre son relevantes
-    for pt in keyword_points:
-        if pt.id not in seen_ids:
-            seen_ids.add(pt.id)
-            combined.append(pt)
-
-    # Resultados vectoriales sólo si superan el umbral de similitud
-    for pt in vector_results:
-        if pt.id not in seen_ids:
-            if pt.score >= config.SCORE_THRESHOLD:
-                seen_ids.add(pt.id)
-                combined.append(pt)
-            if len(combined) >= top_k:
-                break
-
+    for pid, rrf_sc in sorted_ranks[:top_k]:
+        orig = points_by_id[pid]
+        combined.append(
+            qm.ScoredPoint(
+                id=orig.id,
+                version=0,
+                score=rrf_sc,
+                payload=orig.payload,
+                vector=None
+            )
+        )
     return combined
+
 
 
 def _location(p: dict) -> str:
@@ -135,7 +275,8 @@ def answer(qdrant: QdrantClient, llm: ollama.Client, question: str, args: argpar
     if args.solo_buscar:
         for i, pt in enumerate(points, start=1):
             p = pt.payload or {}
-            print(f"[{i}] ({pt.score:.3f}) {_location(p)}\n{p.get('text', '')}\n{'-' * 60}")
+            score_val = f"{pt.score:.3f}" if getattr(pt, "score", None) is not None else "1.000"
+            print(f"[{i}] ({score_val}) {_location(p)}\n{p.get('text', '')}\n{'-' * 60}")
         return
 
     messages = [
@@ -147,7 +288,9 @@ def answer(qdrant: QdrantClient, llm: ollama.Client, question: str, args: argpar
 
     print("\n\nFuentes:")
     for i, pt in enumerate(points, start=1):
-        print(f"  [{i}] ({pt.score:.3f}) {_location(pt.payload or {})}")
+        score_val = f"{pt.score:.3f}" if getattr(pt, "score", None) is not None else "1.000"
+        print(f"  [{i}] ({score_val}) {_location(pt.payload or {})}")
+
 
 
 def main() -> None:

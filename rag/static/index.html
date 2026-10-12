@@ -6,7 +6,8 @@
   <title>Tu Archivo · RAG Homelab</title>
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-  <link href="https://fonts.googleapis.com/css2?family=Caprasimo&family=Figtree:wght@400;500;600;700&display=swap" rel="stylesheet">
+  <link href="https://fonts.googleapis.com/css2?family=Caprasimo&family=Figtree:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+  <script src="https://cdn.jsdelivr.net/npm/marked@12.0.2/marked.min.js"></script>
 
   <style>
     :root {
@@ -138,14 +139,15 @@
     }
 
     .history-item {
-      padding: 9px 14px;
+      padding: 8px 12px;
       border-radius: 999px;
       font-size: 13.5px;
       color: var(--color-text);
       cursor: pointer;
-      white-space: nowrap;
-      overflow: hidden;
-      text-overflow: ellipsis;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 8px;
       transition: background 0.15s;
     }
 
@@ -158,6 +160,34 @@
       font-weight: 600;
       box-shadow: var(--shadow-sm);
     }
+
+    .history-text {
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      flex: 1;
+    }
+
+    .btn-del-conv {
+      display: none;
+      background: none;
+      border: none;
+      color: var(--color-neutral-700);
+      cursor: pointer;
+      padding: 2px 4px;
+      border-radius: 4px;
+      line-height: 1;
+      font-size: 14px;
+    }
+
+    .history-item:hover .btn-del-conv {
+      display: block;
+    }
+
+    .btn-del-conv:hover {
+      color: #b33939;
+    }
+
 
     .folders-box {
       display: flex;
@@ -263,11 +293,178 @@
     }
 
     .entry-answer {
-      font-size: 16.5px;
+      font-size: 16px;
       line-height: 1.75;
       color: var(--color-text);
       text-wrap: pretty;
-      white-space: pre-wrap;
+      word-break: break-word;
+    }
+
+    .entry-answer p {
+      margin-bottom: 12px;
+    }
+
+    .entry-answer p:last-child {
+      margin-bottom: 0;
+    }
+
+    .entry-answer h1, 
+    .entry-answer h2, 
+    .entry-answer h3, 
+    .entry-answer h4 {
+      font-family: var(--font-heading);
+      color: var(--color-text);
+      margin-top: 20px;
+      margin-bottom: 10px;
+      line-height: 1.25;
+    }
+
+    .entry-answer h1 { font-size: 26px; }
+    .entry-answer h2 { font-size: 22px; }
+    .entry-answer h3 { font-size: 19px; }
+    .entry-answer h4 { font-size: 17px; }
+
+    .entry-answer ul, 
+    .entry-answer ol {
+      margin: 10px 0 14px 24px;
+      display: flex;
+      flex-direction: column;
+      gap: 6px;
+    }
+
+    .entry-answer li {
+      line-height: 1.6;
+    }
+
+    .entry-answer blockquote {
+      border-left: 3px solid var(--color-accent);
+      padding: 6px 16px;
+      margin: 14px 0;
+      color: var(--color-neutral-800);
+      background: rgba(198, 113, 57, 0.06);
+      border-radius: 0 8px 8px 0;
+      font-style: italic;
+    }
+
+    .entry-answer code {
+      font-family: 'JetBrains Mono', monospace;
+      font-size: 13.5px;
+      background: rgba(32, 30, 29, 0.08);
+      padding: 2px 6px;
+      border-radius: 6px;
+      color: var(--color-accent-hover);
+    }
+
+    /* --- CELDAS DE CÓDIGO CON BOTÓN DE COPIAR --- */
+    .code-block-wrap {
+      position: relative;
+      margin: 16px 0;
+      border-radius: 12px;
+      overflow: hidden;
+      background: #24211d;
+      box-shadow: var(--shadow-sm);
+      border: 1px solid rgba(255, 255, 255, 0.08);
+    }
+
+    .code-header {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      padding: 8px 14px;
+      background: #1c1a17;
+      border-bottom: 1px solid rgba(255, 255, 255, 0.06);
+      font-size: 12px;
+      color: #a89f91;
+      font-family: 'JetBrains Mono', monospace;
+    }
+
+    .btn-copy-code {
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      background: rgba(255, 255, 255, 0.08);
+      border: 1px solid rgba(255, 255, 255, 0.12);
+      color: #ebddc5;
+      padding: 4px 10px;
+      border-radius: 6px;
+      font-size: 11.5px;
+      font-family: var(--font-body);
+      font-weight: 500;
+      cursor: pointer;
+      transition: all 0.15s ease;
+    }
+
+    .btn-copy-code:hover {
+      background: var(--color-accent);
+      color: #fff;
+      border-color: var(--color-accent);
+    }
+
+    .code-block-wrap pre {
+      margin: 0;
+      padding: 14px 16px;
+      overflow-x: auto;
+      font-family: 'JetBrains Mono', monospace;
+      font-size: 13.5px;
+      line-height: 1.55;
+      color: #f5ead8;
+    }
+
+    .code-block-wrap pre code {
+      background: transparent !important;
+      padding: 0 !important;
+      border-radius: 0 !important;
+      color: inherit !important;
+      font-family: inherit;
+    }
+
+    /* Tablas Markdown */
+    .entry-answer table {
+      width: 100%;
+      border-collapse: collapse;
+      margin: 16px 0;
+      font-size: 14px;
+    }
+
+    .entry-answer th, 
+    .entry-answer td {
+      border: 1px solid var(--color-divider);
+      padding: 8px 12px;
+      text-align: left;
+    }
+
+    .entry-answer th {
+      background: var(--color-surface);
+      font-weight: 600;
+    }
+
+    /* Barra de acciones de la respuesta (Copiar respuesta completa) */
+    .entry-actions {
+      display: flex;
+      gap: 10px;
+      margin-top: 8px;
+    }
+
+    .btn-action-copy {
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      background: transparent;
+      border: 1px solid var(--color-divider);
+      color: var(--color-neutral-700);
+      padding: 5px 12px;
+      border-radius: 999px;
+      font-size: 12px;
+      cursor: pointer;
+      font-family: var(--font-body);
+      font-weight: 500;
+      transition: all 0.15s;
+    }
+
+    .btn-action-copy:hover {
+      background: var(--color-surface);
+      color: var(--color-text);
+      border-color: var(--color-accent);
     }
 
     /* Cursor de máquina de escribir mientras streamea */
@@ -275,9 +472,11 @@
       content: '▋';
       display: inline-block;
       color: var(--color-accent);
-      margin-left: 2px;
+      margin-left: 3px;
       animation: blink 0.8s infinite;
+      vertical-align: baseline;
     }
+
 
     @keyframes blink {
       0%, 100% { opacity: 1; }
@@ -513,7 +712,25 @@
       try {
         const saved = localStorage.getItem('tu_archivo_convs');
         if (saved) {
-          conversations = JSON.parse(saved);
+          const parsed = JSON.parse(saved);
+          // Migrar formato antiguo a nuevo si es necesario
+          conversations = parsed.map(c => {
+            if (c.entries) return c;
+            return {
+              id: c.id,
+              title: c.question,
+              timestamp: c.timestamp,
+              entries: [
+                {
+                  id: "e-" + c.id,
+                  question: c.question,
+                  answer: c.answer,
+                  sources: c.sources || [],
+                  timestamp: c.timestamp
+                }
+              ]
+            };
+          });
           renderHistoryList();
           if (conversations.length > 0) {
             switchConversation(conversations[0].id);
@@ -530,11 +747,128 @@
       conversations.forEach(conv => {
         const div = document.createElement('div');
         div.className = 'history-item' + (conv.id === activeConvId ? ' active' : '');
-        div.textContent = conv.question;
-        div.title = conv.question;
         div.onclick = () => switchConversation(conv.id);
+
+        const titleSpan = document.createElement('span');
+        titleSpan.className = 'history-text';
+        titleSpan.textContent = conv.title || "Nueva conversación";
+        titleSpan.title = conv.title || "";
+
+        const delBtn = document.createElement('button');
+        delBtn.className = 'btn-del-conv';
+        delBtn.innerHTML = '&times;';
+        delBtn.title = 'Eliminar conversación';
+        delBtn.onclick = (e) => {
+          e.stopPropagation();
+          deleteConversation(conv.id);
+        };
+
+        div.appendChild(titleSpan);
+        div.appendChild(delBtn);
         container.appendChild(div);
       });
+    }
+
+    function deleteConversation(id) {
+      if (isStreaming) return;
+      conversations = conversations.filter(c => c.id !== id);
+      saveToLocalStorage();
+      if (activeConvId === id) {
+        if (conversations.length > 0) {
+          switchConversation(conversations[0].id);
+        } else {
+          newConversation();
+        }
+      } else {
+        renderHistoryList();
+      }
+    }
+
+    // Configurar renderizado Markdown y formateo de bloques de código
+    function renderMarkdown(rawText) {
+      if (!rawText) return "";
+      try {
+        if (window.marked && typeof marked.parse === 'function') {
+          return marked.parse(rawText, { breaks: true, gfm: true });
+        }
+      } catch (err) {
+        console.warn("Error en marked parser:", err);
+      }
+      return escapeHtml(rawText);
+    }
+
+    // Procesa el elemento HTML para envolver celdas <pre><code> con header y botón de copiar
+    function enhanceCodeBlocks(parentEl) {
+      if (!parentEl) return;
+      const pres = parentEl.querySelectorAll('pre');
+      pres.forEach(pre => {
+        if (pre.closest('.code-block-wrap')) return; // Ya fue envuelto
+
+        const codeEl = pre.querySelector('code');
+        const codeText = codeEl ? codeEl.innerText : pre.innerText;
+        
+        // Detectar lenguaje si viene en class="language-xyz"
+        let langName = "código";
+        if (codeEl && codeEl.className) {
+          const match = codeEl.className.match(/language-(\w+)/);
+          if (match) langName = match[1];
+        }
+
+        const wrap = document.createElement('div');
+        wrap.className = 'code-block-wrap';
+
+        const header = document.createElement('div');
+        header.className = 'code-header';
+        header.innerHTML = `
+          <span>${escapeHtml(langName)}</span>
+          <button class="btn-copy-code" type="button" title="Copiar código">
+            <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+              <rect width="14" height="14" x="8" y="8" rx="2" ry="2"/>
+              <path d="M4 16c-1.1 0-2-.9-2-2V4c0-1.1.9-2 2-2h10c1.1 0 2 .9 2 2"/>
+            </svg>
+            <span>Copiar</span>
+          </button>
+        `;
+
+        const copyBtn = header.querySelector('.btn-copy-code');
+        copyBtn.onclick = async () => {
+          try {
+            await navigator.clipboard.writeText(codeText);
+            const span = copyBtn.querySelector('span');
+            const original = span.textContent;
+            span.textContent = '¡Copiado!';
+            copyBtn.style.background = 'var(--color-accent)';
+            setTimeout(() => {
+              span.textContent = original;
+              copyBtn.style.background = '';
+            }, 2000);
+          } catch (e) {
+            console.error("Fallo al copiar:", e);
+          }
+        };
+
+        pre.parentNode.insertBefore(wrap, pre);
+        wrap.appendChild(header);
+        wrap.appendChild(pre);
+      });
+    }
+
+    async function copyFullAnswer(text, btn) {
+      try {
+        await navigator.clipboard.writeText(text);
+        const original = btn.innerHTML;
+        btn.innerHTML = `
+          <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+            <polyline points="20 6 9 17 4 12"/>
+          </svg>
+          ¡Copiado!
+        `;
+        setTimeout(() => {
+          btn.innerHTML = original;
+        }, 2000);
+      } catch (err) {
+        console.error("No se pudo copiar la respuesta:", err);
+      }
     }
 
     function switchConversation(id) {
@@ -546,15 +880,29 @@
       if (!conv) return;
 
       const container = document.getElementById('page-container');
-      container.innerHTML = `
-        <div class="entry-card" id="entry-${conv.id}">
-          <div class="entry-meta">Página consultada · ${escapeHtml(conv.timestamp)}</div>
-          <h2 class="entry-question">${escapeHtml(conv.question)}</h2>
-          <div class="entry-answer" id="entry-${conv.id}-answer">${escapeHtml(conv.answer)}</div>
-          <div class="sources-card" id="entry-${conv.id}-sources" style="display: ${conv.sources && conv.sources.length ? 'flex' : 'none'};">
+      container.innerHTML = "";
+
+      conv.entries.forEach(entry => {
+        const entryDiv = document.createElement('div');
+        entryDiv.className = 'entry-card';
+        entryDiv.id = `entry-${entry.id}`;
+        entryDiv.innerHTML = `
+          <div class="entry-meta">Página consultada · ${escapeHtml(entry.timestamp)}</div>
+          <h2 class="entry-question">${escapeHtml(entry.question)}</h2>
+          <div class="entry-answer" id="entry-${entry.id}-answer">${renderMarkdown(entry.answer)}</div>
+          <div class="entry-actions">
+            <button class="btn-action-copy" type="button" onclick="copyFullAnswer(decodeURIComponent('${encodeURIComponent(entry.answer || '')}'), this)">
+              <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                <rect width="14" height="14" x="8" y="8" rx="2" ry="2"/>
+                <path d="M4 16c-1.1 0-2-.9-2-2V4c0-1.1.9-2 2-2h10c1.1 0 2 .9 2 2"/>
+              </svg>
+              Copiar respuesta (Markdown)
+            </button>
+          </div>
+          <div class="sources-card" id="entry-${entry.id}-sources" style="display: ${entry.sources && entry.sources.length ? 'flex' : 'none'};">
             <div class="sources-title">Fuentes consultadas</div>
-            <div id="entry-${conv.id}-sources-list">
-              ${(conv.sources || []).map((s, idx) => `
+            <div id="entry-${entry.id}-sources-list">
+              ${(entry.sources || []).map((s, idx) => `
                 <div class="source-item">
                   <span class="source-num">${idx + 1}</span>
                   <div>
@@ -566,13 +914,16 @@
             </div>
           </div>
           <div class="divider"></div>
-        </div>
-      `;
+        `;
+        container.appendChild(entryDiv);
+        enhanceCodeBlocks(entryDiv.querySelector(`#entry-${entry.id}-answer`));
+      });
 
       const scrollArea = document.getElementById('page-scroll');
-      scrollArea.scrollTop = 0;
+      scrollArea.scrollTop = scrollArea.scrollHeight;
       document.getElementById('query-input').focus();
     }
+
 
     function newConversation() {
       if (isStreaming) return;
@@ -599,45 +950,68 @@
       isStreaming = true;
       document.getElementById('send-button').disabled = true;
 
-      // Ocultar pantalla de bienvenida
+      // Ocultar pantalla de bienvenida si está visible
       const welcome = document.getElementById('welcome-screen');
       if (welcome) welcome.remove();
 
       const timeStr = "hoy, " + new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
-      const convId = "conv-" + Date.now();
-      activeConvId = convId;
+      let conv = conversations.find(c => c.id === activeConvId);
 
-      const currentConv = {
-        id: convId,
+      // Si no hay conversación activa, crear una nueva
+      if (!conv) {
+        const newId = "conv-" + Date.now();
+        conv = {
+          id: newId,
+          title: question,
+          timestamp: timeStr,
+          entries: []
+        };
+        conversations.unshift(conv);
+        activeConvId = newId;
+      }
+
+      // Preparar historial previo para enviarlo al modelo como contexto
+      const messagesHistory = [];
+      conv.entries.forEach(item => {
+        messagesHistory.push({ role: "user", content: item.question });
+        messagesHistory.push({ role: "assistant", content: item.answer });
+      });
+
+      // Crear nueva entrada dentro de este hilo/conversación
+      const entryId = "e-" + Date.now();
+      const currentEntry = {
+        id: entryId,
         question: question,
         answer: "",
         sources: [],
         timestamp: timeStr
       };
-      conversations.unshift(currentConv);
+      conv.entries.push(currentEntry);
       renderHistoryList();
 
-      // Renderizar el contenedor actual
+      // Agregar la tarjeta al contenedor actual (manteniendo turnos anteriores en pantalla)
       const container = document.getElementById('page-container');
-      container.innerHTML = `
-        <div class="entry-card" id="entry-${convId}">
-          <div class="entry-meta">Página consultada · ${escapeHtml(timeStr)}</div>
-          <h2 class="entry-question">${escapeHtml(question)}</h2>
-          <div class="entry-answer typing-cursor" id="entry-${convId}-answer"></div>
-          <div class="sources-card" id="entry-${convId}-sources" style="display: none;">
-            <div class="sources-title">Fuentes consultadas</div>
-            <div id="entry-${convId}-sources-list"></div>
-          </div>
-          <div class="divider"></div>
+      const entryDiv = document.createElement('div');
+      entryDiv.className = 'entry-card';
+      entryDiv.id = `entry-${entryId}`;
+      entryDiv.innerHTML = `
+        <div class="entry-meta">Página consultada · ${escapeHtml(timeStr)}</div>
+        <h2 class="entry-question">${escapeHtml(question)}</h2>
+        <div class="entry-answer typing-cursor" id="entry-${entryId}-answer"></div>
+        <div class="sources-card" id="entry-${entryId}-sources" style="display: none;">
+          <div class="sources-title">Fuentes consultadas</div>
+          <div id="entry-${entryId}-sources-list"></div>
         </div>
+        <div class="divider"></div>
       `;
+      container.appendChild(entryDiv);
 
       const scrollArea = document.getElementById('page-scroll');
       scrollArea.scrollTop = scrollArea.scrollHeight;
 
-      const answerEl = document.getElementById(`entry-${convId}-answer`);
-      const sourcesCard = document.getElementById(`entry-${convId}-sources`);
-      const sourcesList = document.getElementById(`entry-${convId}-sources-list`);
+      const answerEl = document.getElementById(`entry-${entryId}-answer`);
+      const sourcesCard = document.getElementById(`entry-${entryId}-sources`);
+      const sourcesList = document.getElementById(`entry-${entryId}-sources-list`);
 
       try {
         const response = await fetch('/api/chat', {
@@ -646,7 +1020,8 @@
           body: JSON.stringify({
             question: question,
             source: currentFolder === "(Todos)" ? null : currentFolder,
-            top_k: 7
+            top_k: 7,
+            messages: messagesHistory
           })
         });
 
@@ -667,7 +1042,7 @@
               const data = JSON.parse(line.substring(6));
 
               if (data.type === 'sources') {
-                currentConv.sources = data.sources || [];
+                currentEntry.sources = data.sources || [];
                 if (data.sources && data.sources.length > 0) {
                   sourcesCard.style.display = 'flex';
                   sourcesList.innerHTML = data.sources.map((s, idx) => `
@@ -681,19 +1056,37 @@
                   `).join('');
                 }
               } else if (data.type === 'token') {
-                currentConv.answer += data.text;
-                answerEl.textContent += data.text;
+                currentEntry.answer += data.text;
+                // Renderizado Markdown en vivo conforme llegan los tokens
+                answerEl.innerHTML = renderMarkdown(currentEntry.answer);
+                enhanceCodeBlocks(answerEl);
                 scrollArea.scrollTop = scrollArea.scrollHeight;
               } else if (data.type === 'done') {
                 answerEl.classList.remove('typing-cursor');
+                answerEl.innerHTML = renderMarkdown(currentEntry.answer);
+                enhanceCodeBlocks(answerEl);
+                
+                // Agregar botón para copiar toda la respuesta en Markdown
+                const actionsDiv = document.createElement('div');
+                actionsDiv.className = 'entry-actions';
+                actionsDiv.innerHTML = `
+                  <button class="btn-action-copy" type="button" onclick="copyFullAnswer(decodeURIComponent('${encodeURIComponent(currentEntry.answer || '')}'), this)">
+                    <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                      <rect width="14" height="14" x="8" y="8" rx="2" ry="2"/>
+                      <path d="M4 16c-1.1 0-2-.9-2-2V4c0-1.1.9-2 2-2h10c1.1 0 2 .9 2 2"/>
+                    </svg>
+                    Copiar respuesta (Markdown)
+                  </button>
+                `;
+                answerEl.parentNode.insertBefore(actionsDiv, sourcesCard);
               }
             }
           }
         }
       } catch (err) {
-        const errText = "\n[Error al conectar con el servidor]";
-        currentConv.answer += errText;
-        answerEl.textContent += errText;
+        const errText = "\n\n> ⚠️ Error al conectar con el servidor.";
+        currentEntry.answer += errText;
+        answerEl.innerHTML = renderMarkdown(currentEntry.answer);
         answerEl.classList.remove('typing-cursor');
       } finally {
         answerEl.classList.remove('typing-cursor');
@@ -704,6 +1097,7 @@
       }
     }
 
+
     function escapeHtml(str) {
       if (!str) return "";
       return String(str).replace(/[&<>'"]/g, tag => ({
@@ -713,6 +1107,7 @@
 
     loadSources();
     loadFromLocalStorage();
+
   </script>
 </body>
 </html>

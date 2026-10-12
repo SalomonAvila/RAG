@@ -1,0 +1,51 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" width="512" height="512">
+  <defs>
+    <!-- Gradiente de fondo cálido editorial -->
+    <linearGradient id="bgGrad" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#d67b41"/>
+      <stop offset="100%" stop-color="#b05822"/>
+    </linearGradient>
+
+    <!-- Sombra sutil -->
+    <filter id="shadow" x="-10%" y="-10%" width="125%" height="125%">
+      <feDropShadow dx="0" dy="12" stdDeviation="16" flood-color="#2a1810" flood-opacity="0.3"/>
+    </filter>
+  </defs>
+
+  <!-- Contenedor redondeado estilo app moderno -->
+  <rect width="512" height="512" rx="120" fill="url(#bgGrad)"/>
+
+  <!-- Icono de libreta/archivo estilizado con lomo encuadernado -->
+  <g filter="url(#shadow)">
+    <!-- Cubierta trasera / página interna -->
+    <rect x="136" y="116" width="240" height="280" rx="28" fill="#ebddc5" opacity="0.95"/>
+    <rect x="124" y="128" width="240" height="268" rx="24" fill="#f5ead8"/>
+
+    <!-- Lomo del cuaderno a la izquierda -->
+    <path d="M 124 148 Q 124 128 144 128 L 176 128 L 176 396 L 144 396 Q 124 396 124 376 Z" fill="#c67139" opacity="0.35"/>
+
+    <!-- Anillas / perforaciones del archivo -->
+    <circle cx="150" cy="180" r="10" fill="#f5ead8"/>
+    <circle cx="150" cy="230" r="10" fill="#f5ead8"/>
+    <circle cx="150" cy="280" r="10" fill="#f5ead8"/>
+    <circle cx="150" cy="330" r="10" fill="#f5ead8"/>
+
+    <circle cx="150" cy="180" r="6" fill="#8c471c"/>
+    <circle cx="150" cy="230" r="6" fill="#8c471c"/>
+    <circle cx="150" cy="280" r="6" fill="#8c471c"/>
+    <circle cx="150" cy="330" r="6" fill="#8c471c"/>
+
+    <!-- Líneas de texto / investigación -->
+    <rect x="200" y="174" width="130" height="12" rx="6" fill="#c67139" opacity="0.45"/>
+    <rect x="200" y="204" width="100" height="12" rx="6" fill="#645c50" opacity="0.35"/>
+    <rect x="200" y="234" width="120" height="12" rx="6" fill="#645c50" opacity="0.35"/>
+
+    <!-- Símbolo "A" de Archivo destacado con tipografía serif grabada -->
+    <text x="256" y="356" 
+          font-family="FreeSerif, serif" 
+          font-size="110" 
+          font-weight="bold" 
+          text-anchor="middle" 
+          fill="#c67139">A</text>
+  </g>
+</svg>
