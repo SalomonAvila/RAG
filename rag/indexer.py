@@ -48,9 +48,9 @@ async def coco_lifespan(builder: coco.EnvironmentBuilder) -> AsyncIterator[None]
 
 
 def _extract_pdf_pages(data: bytes) -> list[tuple[int | None, str]]:
-    import fitz  # PyMuPDF: motor en C/C++ ultrarrápido
+    import pymupdf  # Motor en C/C++ ultrarrápido
 
-    doc = fitz.open(stream=data, filetype="pdf")
+    doc = pymupdf.open(stream=data, filetype="pdf")
     pages: list[tuple[int | None, str]] = []
     for i, page in enumerate(doc, start=1):
         try:
