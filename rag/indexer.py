@@ -62,6 +62,20 @@ def _extract_pdf_pages(data: bytes) -> list[tuple[int | None, str]]:
     return pages
 
 
+def _extract_docx_text(data: bytes) -> str:
+    import io
+    import docx
+
+    doc = docx.Document(io.BytesIO(data))
+    paragraphs = [p.text for p in doc.paragraphs if p.text.strip()]
+    for table in doc.tables:
+        for row in table.rows:
+            row_text = " | ".join(cell.text.strip() for cell in row.cells if cell.text.strip())
+            if row_text:
+                paragraphs.append(row_text)
+    return "\n\n".join(paragraphs)
+
+
 @coco.fn
 async def process_chunk(
     chunk: Chunk,
@@ -96,14 +110,20 @@ async def process_file(file: FileLike, target: qdrant.CollectionTarget) -> None:
     rel_path = path.as_posix()
     # "source" = primera carpeta dentro de RAG_SOURCE_DIR (p.ej. el nombre del repo o materia)
     source = path.parts[0] if len(path.parts) > 1 else "(raíz)"
-    is_pdf = path.suffix.lower() == ".pdf"
+    suffix = path.suffix.lower()
+    is_pdf = suffix == ".pdf"
+    is_docx = suffix == ".docx"
 
     size = await file.size()
-    if size > (config.MAX_PDF_FILE_BYTES if is_pdf else config.MAX_TEXT_FILE_BYTES):
+    if size > (config.MAX_PDF_FILE_BYTES if (is_pdf or is_docx) else config.MAX_TEXT_FILE_BYTES):
         return
 
     if is_pdf:
         pages = await asyncio.to_thread(_extract_pdf_pages, await file.read())
+        language = None
+    elif is_docx:
+        text = await asyncio.to_thread(_extract_docx_text, await file.read())
+        pages = [(None, text)]
         language = None
     else:
         text = await file.read_text()

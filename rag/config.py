@@ -34,7 +34,7 @@ CHUNK_OVERLAP = 200
 # Archivos a indexar
 INCLUDED_PATTERNS = [
     # Documentos
-    "**/*.md", "**/*.mdx", "**/*.txt", "**/*.rst", "**/*.tex", "**/*.typ", "**/*.bib", "**/*.pdf",
+    "**/*.md", "**/*.mdx", "**/*.txt", "**/*.rst", "**/*.tex", "**/*.typ", "**/*.bib", "**/*.pdf", "**/*.docx",
     # Código
     "**/*.py", "**/*.ipynb", "**/*.js", "**/*.jsx", "**/*.ts", "**/*.tsx",
     "**/*.java", "**/*.kt", "**/*.go", "**/*.rs", "**/*.c", "**/*.h",
