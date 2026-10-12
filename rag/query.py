@@ -19,14 +19,13 @@ from qdrant_client.http import models as qm
 
 from rag import config
 
-SYSTEM_PROMPT = """Eres un asistente de investigación de alto nivel y experto en ingeniería de software y computación.
-Tu objetivo es responder las preguntas del usuario analizando y sintetizando en profundidad el contexto proporcionado (fragmentos de sus tesis, artículos y código).
+SYSTEM_PROMPT = """Eres un asistente experto para responder preguntas basándote estrictamente en los documentos del usuario.
 
 Pautas de respuesta:
-1. Comprensión conceptual: No te limites a copiar frases sueltas. Explica el "qué", el "por qué" y el "cómo", sintetizando la arquitectura, metodología, objetivos y hallazgos clave.
-2. Estructura y claridad: Usa viñetas, secciones o párrafos bien articulados para facilitar la lectura.
-3. Precisión estricta: Basa tus afirmaciones únicamente en el contexto proporcionado. Cita las fuentes relevantes usando [n] justo después de las ideas extraídas.
-4. Si el contexto no contiene la información para responder con certeza, indícalo de forma clara y transparente sin inventar."""
+1. Relevancia estricta y enfoque: Responde de forma precisa y directa ÚNICAMENTE a lo que el usuario preguntó. Si parte del contexto recuperado no tiene relación directa con la pregunta formulada, ignórala por completo y jamás agregues resúmenes o explicaciones de temas no solicitados.
+2. Proporcionalidad: Si la pregunta es puntual, breve o específica, responde de forma concisa sin rodeos. Si la pregunta es amplia, metodológica o de arquitectura técnica, desarrolla la respuesta con la estructura y profundidad adecuadas.
+3. Precisión estricta: Basa todas tus afirmaciones exclusivamente en los fragmentos relevantes del contexto. Cita las fuentes [n] justo después de cada dato o idea extraída.
+4. Honestidad: Si el contexto no contiene información suficiente para responder con certeza a lo preguntado, indícalo brevemente y con total transparencia sin especular ni rellenar."""
 
 
 def _extract_tokens(text: str) -> list[str]:
@@ -237,10 +236,9 @@ EXPANSION: [términos y componentes separados por espacio]"""
         return []
 
     # Selección Dinámica Automática de Fuentes:
-    # En lugar de fijar ciegamente un número fijo (como 7), detectamos cuántos fragmentos
-    # son genuinamente relevantes para esta consulta específica según la caída de puntuación.
+    # Si la consulta apunta a un fragmento único con ventaja clara, se retorna solo ese fragmento.
+    # Si hay múltiples fragmentos con relevancia continua (como un temario o sección), se conservan hasta max_k.
     max_score = sorted_ranks[0][1]
-    min_k = min(3, len(sorted_ranks))
     max_k = top_k
 
     combined: list[qm.ScoredPoint] = []
@@ -250,9 +248,10 @@ EXPANSION: [términos y componentes separados por espacio]"""
         ratio = rrf_sc / max_score if max_score > 0 else 1.0
         gap = (prev_score - rrf_sc) / prev_score if prev_score > 0 else 0.0
 
-        # Mantener si estamos dentro del mínimo o si conserva alta relevancia relativa (>=70%)
-        # sin caídas bruscas (>25% de salto entre posiciones consecutivas).
-        if i < min_k or (ratio >= 0.70 and gap < 0.25):
+        # El primer elemento siempre se incluye.
+        # Los siguientes solo si conservan alta relevancia relativa (>=65%)
+        # y no sufren un salto abrupto hacia abajo (gap < 25%).
+        if i == 0 or (ratio >= 0.65 and gap < 0.25):
             orig = points_by_id[pid]
             combined.append(
                 qm.ScoredPoint(
