@@ -97,7 +97,7 @@ def build_app() -> gr.Blocks:
         secondary_hue="slate",
     )
 
-    with gr.Blocks(theme=custom_theme, title="RAG Local Homelab") as demo:
+    with gr.Blocks(title="RAG Local Homelab") as demo:
         gr.Markdown(
             """
             # 🧠 RAG Local Homelab
@@ -110,7 +110,6 @@ def build_app() -> gr.Blocks:
                 chatbot = gr.Chatbot(
                     label="Conversación",
                     height=520,
-                    show_copy_button=True,
                     render_markdown=True,
                 )
                 with gr.Row():
@@ -176,8 +175,11 @@ def build_app() -> gr.Blocks:
 
 def main():
     demo = build_app()
-    # server_name="0.0.0.0" permite acceder desde cualquier equipo de tu red local
-    demo.launch(server_name="0.0.0.0", server_port=7860, share=False)
+    custom_theme = gr.themes.Soft(
+        primary_hue="indigo",
+        secondary_hue="slate",
+    )
+    demo.launch(theme=custom_theme, server_name="0.0.0.0", server_port=7860, share=False)
 
 
 if __name__ == "__main__":
