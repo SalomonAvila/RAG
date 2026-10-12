@@ -9,3 +9,8 @@ wheels/
 # Virtual environments
 .venv
 .env
+
+# RAG: datos locales y estado
+qdrant_storage/
+.cocoindex_db/
+data/

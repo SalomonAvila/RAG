@@ -1,0 +1,17 @@
+[project]
+name = "rag-homelab"
+version = "0.1.0"
+description = "RAG 100% local: CocoIndex (indexación incremental) + Qdrant + Ollama"
+readme = "README.md"
+requires-python = ">=3.11"
+dependencies = [
+    "cocoindex[qdrant,litellm]>=1.0.25",
+    "qdrant-client>=1.16.0",
+    "ollama>=0.4.0",
+    "pypdf>=5.0.0",
+    "python-dotenv>=1.0.1",
+    "numpy",
+]
+
+[tool.uv]
+package = false

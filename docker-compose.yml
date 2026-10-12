@@ -1,0 +1,11 @@
+services:
+  qdrant:
+    image: qdrant/qdrant:latest
+    container_name: rag-qdrant
+    restart: unless-stopped
+    ports:
+      - "6333:6333" # HTTP + dashboard (http://<host>:6333/dashboard)
+      - "6334:6334" # gRPC (lo usa el pipeline)
+    volumes:
+      # ':z' = etiqueta SELinux necesaria en Fedora para que el contenedor pueda escribir
+      - ./qdrant_storage:/qdrant/storage:z
