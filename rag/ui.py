@@ -77,7 +77,7 @@ def build_app() -> gr.Blocks:
             """
             <div id="chat-header">
                 <h1>📚 Asistente de Documentos</h1>
-                <p>Consulta tus tesis, notas de clase y repositorios de forma privada y local.</p>
+                <p>Consulta tus documentos de forma local</p>
             </div>
             """
         )

@@ -34,19 +34,67 @@ def search(
     top_k: int,
     source: str | None,
 ) -> list[qm.ScoredPoint]:
+    # 1. Búsqueda vectorial semántica (densa)
     vector = llm.embed(model=config.EMBED_MODEL, input=config.QUERY_PREFIX + question).embeddings[0]
-    query_filter = (
+    base_filter = (
         qm.Filter(must=[qm.FieldCondition(key="source", match=qm.MatchValue(value=source))])
         if source
         else None
     )
-    return qdrant.query_points(
+    vector_results = qdrant.query_points(
         collection_name=config.QDRANT_COLLECTION,
         query=vector,
-        query_filter=query_filter,
-        limit=top_k,
+        query_filter=base_filter,
+        limit=max(top_k * 2, 10),
         with_payload=True,
     ).points
+
+    # 2. Búsqueda por palabras clave relevantes (nombres propios, términos específicos en ruta o contenido)
+    import re
+    # Palabras de más de 3 letras ignorando stopwords comunes
+    STOPWORDS = {"para", "como", "esta", "sobre", "entre", "donde", "cuando", "quien", "cual", "trata", "tesis"}
+    tokens = [w for w in re.findall(r"\b\w+\b", question) if len(w) >= 4 and w.lower() not in STOPWORDS]
+
+    keyword_points: list[qm.ScoredPoint] = []
+    if tokens:
+        should_conditions = []
+        for token in tokens[:4]:  # tomar hasta las 4 palabras más distintivas
+            should_conditions.append(qm.FieldCondition(key="path", match=qm.MatchText(text=token)))
+            should_conditions.append(qm.FieldCondition(key="text", match=qm.MatchText(text=token)))
+
+        kw_filter = qm.Filter(should=should_conditions)
+        if base_filter:
+            kw_filter = qm.Filter(must=base_filter.must, should=should_conditions)
+
+        try:
+            kw_matches, _ = qdrant.scroll(
+                collection_name=config.QDRANT_COLLECTION,
+                limit=top_k,
+                scroll_filter=kw_filter,
+                with_payload=True,
+            )
+            for m in kw_matches:
+                keyword_points.append(qm.ScoredPoint(
+                    id=m.id,
+                    version=0,
+                    score=1.0,  # Match directo por palabra clave
+                    payload=m.payload,
+                    vector=None
+                ))
+        except Exception:
+            pass
+
+    # 3. Fusión híbrida (Keyword matches prioritarios + complementos vectoriales)
+    seen_ids = set()
+    combined: list[qm.ScoredPoint] = []
+    for pt in keyword_points + vector_results:
+        if pt.id not in seen_ids:
+            seen_ids.add(pt.id)
+            combined.append(pt)
+            if len(combined) >= top_k:
+                break
+
+    return combined
 
 
 def _location(p: dict) -> str:
