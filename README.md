@@ -98,6 +98,31 @@ El script utiliza `rsync` (transmite solo archivos nuevos/modificados y excluye 
 
 ## Consultar el RAG
 
+### Opción 1: Interfaz Gráfica Local con Túnel SSH (Recomendado)
+Puedes ejecutar la interfaz web en tu propio computador de trabajo conectada de forma transparente al servidor por SSH. De esta forma, **la interfaz corre en tu máquina, pero todos los vectores y cómputos de GPU (Ollama) ocurren en el servidor sin consumir tus recursos locales**:
+
+```bash
+# En tu computador local:
+./run_ui_local.sh
+```
+El script abre automáticamente un túnel SSH cifrado hacia el servidor (`Qdrant :6334` y `Ollama :11434`), inicia la aplicación web y la cierra limpiamente al salir. Solo abre en tu navegador:
+`http://localhost:7860`
+
+---
+
+### Opción 2: Ejecutar la Interfaz Directamente en el Servidor
+Si prefieres correr la interfaz dentro del servidor homelab:
+
+```bash
+# En el servidor:
+uv run python -m rag.ui
+```
+Y accede desde cualquier dispositivo en tu red local: `http://<IP-DE-TU-SERVIDOR>:7860`.
+
+---
+
+### Opción 3: Línea de Comandos (CLI)
+
 - **Pregunta directa desde la terminal:**
   ```bash
   uv run python -m rag.query "¿De qué trata el proyecto y cuáles son sus objetivos?"

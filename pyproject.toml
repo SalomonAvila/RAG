@@ -10,6 +10,7 @@ dependencies = [
     "ollama>=0.4.0",
     "pymupdf>=1.24.0",
     "python-dotenv>=1.0.1",
+    "gradio>=4.40.0",
     "numpy",
 ]
 
