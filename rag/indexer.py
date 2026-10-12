@@ -41,20 +41,20 @@ async def coco_lifespan(builder: coco.EnvironmentBuilder) -> AsyncIterator[None]
         LiteLLMEmbedder(
             f"ollama/{config.EMBED_MODEL}",
             api_base=config.OLLAMA_URL,
-            max_inflight_requests=4,  # no saturar la GPU con ráfagas
+            max_inflight_requests=16,  # Concurrencia acelerada aprovechando la VRAM
         ),
     )
     yield
 
 
 def _extract_pdf_pages(data: bytes) -> list[tuple[int | None, str]]:
-    from pypdf import PdfReader
+    import fitz  # PyMuPDF: motor en C/C++ ultrarrápido
 
-    reader = PdfReader(io.BytesIO(data))
+    doc = fitz.open(stream=data, filetype="pdf")
     pages: list[tuple[int | None, str]] = []
-    for i, page in enumerate(reader.pages, start=1):
+    for i, page in enumerate(doc, start=1):
         try:
-            text = page.extract_text() or ""
+            text = page.get_text() or ""
         except Exception:
             continue
         if text.strip():
@@ -153,7 +153,7 @@ async def app_main(source_dir: pathlib.Path) -> None:
 
 
 app = coco.App(
-    coco.AppConfig(name="RagHomelab"),
+    coco.AppConfig(name="RagHomelab", max_inflight_components=8),
     app_main,
     source_dir=config.SOURCE_DIR,
 )
