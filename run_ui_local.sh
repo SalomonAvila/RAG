@@ -20,9 +20,9 @@ ssh -F /dev/null -o BatchMode=yes -f -N \
 TUNNEL_PID=$(pgrep -f "ssh.*-L $PORT_QDRANT:localhost:$PORT_QDRANT.*$REMOTE_HOST" | tail -1)
 trap 'echo ""; echo "🔌 Cerrando túnel SSH..."; kill $TUNNEL_PID 2>/dev/null || true' EXIT
 
-echo "🚀 2. Iniciando Interfaz Gráfica Local (Gradio)..."
+echo "🚀 2. Iniciando Aplicación Local (Tu Archivo)..."
 echo "🌐 Conectado de forma transparente al motor de GPU en $REMOTE_HOST."
 echo "👉 Abre en tu navegador: http://localhost:7860"
 echo ""
 
-uv run python -m rag.ui
+uv run python -m rag.server

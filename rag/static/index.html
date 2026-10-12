@@ -1,0 +1,628 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Tu Archivo · RAG Homelab</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Caprasimo&family=Figtree:wght@400;500;600;700&display=swap" rel="stylesheet">
+
+  <style>
+    :root {
+      --color-bg: #f5ead8;
+      --color-surface: #ebddc5;
+      --color-text: #201e1d;
+      --color-accent: #c67139;
+      --color-accent-hover: #b2622d;
+      --color-accent-2: #7a8a5e;
+      --color-accent-2-light: #e1eecc;
+      --color-neutral-300: #dcd3c4;
+      --color-neutral-700: #645c50;
+      --color-neutral-800: #474238;
+      --color-neutral-900: #2e2b25;
+      --color-divider: rgba(32, 30, 29, 0.14);
+      --font-heading: 'Caprasimo', Georgia, serif;
+      --font-body: 'Figtree', system-ui, -apple-system, sans-serif;
+      --shadow-sm: 0 1px 3px rgba(46, 43, 37, 0.12);
+      --shadow-md: 0 4px 14px rgba(46, 43, 37, 0.15);
+      --shadow-lg: 0 14px 36px rgba(46, 43, 37, 0.22);
+    }
+
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+
+    body {
+      background: var(--color-bg);
+      color: var(--color-text);
+      font-family: var(--font-body);
+      font-size: 15px;
+      line-height: 1.6;
+      height: 100vh;
+      overflow: hidden;
+      display: flex;
+    }
+
+    /* --- SIDEBAR IZQUIERDA (Estilo Cuaderno / Índice) --- */
+    aside {
+      width: 290px;
+      min-width: 290px;
+      background: var(--color-surface);
+      border-right: 1px solid var(--color-divider);
+      padding: 24px 18px;
+      display: flex;
+      flex-direction: column;
+      gap: 20px;
+      height: 100vh;
+    }
+
+    .brand-box {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      padding: 0 6px;
+    }
+
+    .brand-logo {
+      width: 40px;
+      height: 40px;
+      border-radius: 12px;
+      background: var(--color-accent);
+      color: var(--color-bg);
+      display: grid;
+      place-items: center;
+      font-family: var(--font-heading);
+      font-size: 22px;
+      flex-shrink: 0;
+      box-shadow: var(--shadow-sm);
+    }
+
+    .brand-title {
+      font-family: var(--font-heading);
+      font-size: 22px;
+      line-height: 1.1;
+    }
+
+    .brand-sub {
+      font-size: 11.5px;
+      color: var(--color-neutral-700);
+      font-weight: 500;
+    }
+
+    .btn-new {
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      gap: 8px;
+      background: var(--color-accent);
+      color: var(--color-bg);
+      border: none;
+      padding: 12px 18px;
+      border-radius: 999px;
+      font-family: var(--font-body);
+      font-weight: 600;
+      font-size: 14px;
+      cursor: pointer;
+      transition: all 0.2s ease;
+      box-shadow: var(--shadow-sm);
+    }
+
+    .btn-new:hover {
+      background: var(--color-accent-hover);
+      transform: translateY(-1px);
+    }
+
+    .section-label {
+      font-size: 11px;
+      letter-spacing: 0.08em;
+      text-transform: uppercase;
+      color: var(--color-neutral-700);
+      font-weight: 700;
+      padding: 0 8px;
+    }
+
+    .history-list {
+      flex: 1;
+      overflow-y: auto;
+      display: flex;
+      flex-direction: column;
+      gap: 4px;
+    }
+
+    .history-item {
+      padding: 9px 14px;
+      border-radius: 999px;
+      font-size: 13.5px;
+      color: var(--color-text);
+      cursor: pointer;
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      transition: background 0.15s;
+    }
+
+    .history-item:hover {
+      background: rgba(32, 30, 29, 0.06);
+    }
+
+    .history-item.active {
+      background: var(--color-bg);
+      font-weight: 600;
+      box-shadow: var(--shadow-sm);
+    }
+
+    .folders-box {
+      display: flex;
+      flex-direction: column;
+      gap: 8px;
+      padding-top: 10px;
+      border-top: 1px solid var(--color-divider);
+    }
+
+    .folder-tags {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 6px;
+    }
+
+    .tag-folder {
+      background: var(--color-accent-2-light);
+      color: #3d472b;
+      font-size: 11.5px;
+      padding: 4px 10px;
+      border-radius: 999px;
+      font-weight: 600;
+      cursor: pointer;
+    }
+
+    .tag-folder.selected {
+      background: #3d472b;
+      color: #fff;
+    }
+
+    /* --- CONTENIDO PRINCIPAL (Libreta de lectura) --- */
+    main {
+      flex: 1;
+      display: flex;
+      flex-direction: column;
+      height: 100vh;
+      min-width: 0;
+      position: relative;
+    }
+
+    .page-scroll {
+      flex: 1;
+      overflow-y: auto;
+      padding: 56px 80px 30px;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+    }
+
+    .page-container {
+      width: 100%;
+      max-width: 760px;
+      display: flex;
+      flex-direction: column;
+      gap: 28px;
+    }
+
+    .welcome-screen {
+      display: flex;
+      flex-direction: column;
+      gap: 14px;
+      margin-top: 80px;
+      text-align: left;
+    }
+
+    .welcome-screen h1 {
+      font-family: var(--font-heading);
+      font-size: 42px;
+      line-height: 1.1;
+      color: var(--color-text);
+    }
+
+    .welcome-screen p {
+      font-size: 17px;
+      color: var(--color-neutral-800);
+      max-width: 600px;
+    }
+
+    .entry-card {
+      display: flex;
+      flex-direction: column;
+      gap: 16px;
+      animation: fadeIn 0.25s ease-out;
+    }
+
+    @keyframes fadeIn {
+      from { opacity: 0; transform: translateY(6px); }
+      to { opacity: 1; transform: translateY(0); }
+    }
+
+    .entry-meta {
+      font-size: 12.5px;
+      color: var(--color-neutral-700);
+      font-weight: 500;
+    }
+
+    .entry-question {
+      font-family: var(--font-heading);
+      font-size: 32px;
+      line-height: 1.15;
+      color: var(--color-text);
+      text-wrap: balance;
+    }
+
+    .entry-answer {
+      font-size: 16.5px;
+      line-height: 1.75;
+      color: var(--color-text);
+      text-wrap: pretty;
+      white-space: pre-wrap;
+    }
+
+    /* Cursor de máquina de escribir mientras streamea */
+    .typing-cursor::after {
+      content: '▋';
+      display: inline-block;
+      color: var(--color-accent);
+      margin-left: 2px;
+      animation: blink 0.8s infinite;
+    }
+
+    @keyframes blink {
+      0%, 100% { opacity: 1; }
+      50% { opacity: 0; }
+    }
+
+    .sources-card {
+      margin-top: 6px;
+      padding: 20px 24px;
+      background: var(--color-surface);
+      border-radius: 20px;
+      display: flex;
+      flex-direction: column;
+      gap: 12px;
+      box-shadow: var(--shadow-sm);
+    }
+
+    .sources-title {
+      font-family: var(--font-heading);
+      font-size: 18px;
+      color: var(--color-text);
+    }
+
+    .source-item {
+      display: flex;
+      gap: 12px;
+      align-items: baseline;
+      font-size: 13.5px;
+      line-height: 1.45;
+    }
+
+    .source-num {
+      font-weight: 700;
+      color: var(--color-accent);
+      width: 18px;
+      flex-shrink: 0;
+    }
+
+    .source-path {
+      font-weight: 600;
+      color: var(--color-neutral-900);
+    }
+
+    .source-details {
+      color: var(--color-neutral-700);
+    }
+
+    .divider {
+      height: 1px;
+      background: var(--color-divider);
+      margin: 20px 0;
+    }
+
+    /* --- BARRA DE ENTRADA FIJA (Bottom pill) --- */
+    .input-bar-wrap {
+      padding: 16px 80px 28px;
+      display: flex;
+      justify-content: center;
+      width: 100%;
+      background: linear-gradient(to top, var(--color-bg) 75%, transparent);
+    }
+
+    .input-pill {
+      width: 100%;
+      max-width: 760px;
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      padding: 8px 10px 8px 24px;
+      background: var(--color-surface);
+      border-radius: 999px;
+      box-shadow: var(--shadow-md);
+      border: 1px solid var(--color-divider);
+      transition: border-color 0.2s, box-shadow 0.2s;
+    }
+
+    .input-pill:focus-within {
+      border-color: var(--color-accent);
+      box-shadow: var(--shadow-lg);
+    }
+
+    .input-pill input {
+      flex: 1;
+      border: none;
+      background: transparent;
+      font: inherit;
+      font-size: 15.5px;
+      color: var(--color-text);
+      outline: none;
+    }
+
+    .input-pill input::placeholder {
+      color: var(--color-neutral-700);
+    }
+
+    .btn-send {
+      width: 44px;
+      height: 44px;
+      border-radius: 50%;
+      background: var(--color-accent);
+      color: var(--color-bg);
+      border: none;
+      display: grid;
+      place-items: center;
+      cursor: pointer;
+      transition: all 0.2s;
+      flex-shrink: 0;
+    }
+
+    .btn-send:hover {
+      background: var(--color-accent-hover);
+      transform: scale(1.05);
+    }
+
+    .btn-send:disabled {
+      opacity: 0.4;
+      cursor: not-allowed;
+      transform: none;
+    }
+  </style>
+</head>
+<body>
+
+  <!-- BARRA LATERAL -->
+  <aside>
+    <div class="brand-box">
+      <div class="brand-logo" id="logo-icon">A</div>
+      <div>
+        <div class="brand-title">Tu Archivo</div>
+        <div class="brand-sub">Homelab Local · qwen2.5:7b</div>
+      </div>
+    </div>
+
+    <button class="btn-new" id="btn-new-page" onclick="newConversation()">
+      <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.75" stroke-linecap="round" stroke-linejoin="round">
+        <path d="M5 12h14"></path><path d="M12 5v14"></path>
+      </svg>
+      Nueva página
+    </button>
+
+    <div class="section-label">Páginas recientes</div>
+    <div class="history-list" id="history-container">
+      <!-- Se puebla con preguntas recientes -->
+    </div>
+
+    <div class="folders-box">
+      <div class="section-label">Filtrar por Fuente</div>
+      <div class="folder-tags" id="folders-container">
+        <span class="tag-folder selected" onclick="selectFolder('(Todos)')">Todos</span>
+      </div>
+    </div>
+  </aside>
+
+  <!-- ÁREA DE CONTENIDO -->
+  <main>
+    <div class="page-scroll" id="page-scroll">
+      <div class="page-container" id="page-container">
+        
+        <!-- Pantalla de bienvenida cuando está vacío -->
+        <div class="welcome-screen" id="welcome-screen">
+          <h1>¿Qué quieres consultar hoy?</h1>
+          <p>Tu asistente privado lee directamente de tus memorias de tesis, artículos de clase y repositorios de código sin que ningún dato salga de tu servidor.</p>
+        </div>
+
+      </div>
+    </div>
+
+    <!-- BARRA DE PREGUNTAS -->
+    <div class="input-bar-wrap">
+      <form class="input-pill" id="chat-form" onsubmit="handleSend(event)">
+        <input 
+          type="text" 
+          id="query-input" 
+          placeholder="Escribe tu pregunta sobre tus tesis o código..." 
+          autocomplete="off" 
+          autofocus 
+        />
+        <button type="submit" class="btn-send" id="send-button" title="Preguntar">
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.75" stroke-linecap="round" stroke-linejoin="round">
+            <path d="m5 12 7-7 7 7"></path>
+            <path d="M12 19V5"></path>
+          </svg>
+        </button>
+      </form>
+    </div>
+  </main>
+
+  <script>
+    let currentFolder = "(Todos)";
+    let historyQuestions = [];
+    let isStreaming = false;
+
+    // Cargar fuentes disponibles de Qdrant al iniciar
+    async function loadSources() {
+      try {
+        const res = await fetch('/api/sources');
+        const data = await res.json();
+        const container = document.getElementById('folders-container');
+        container.innerHTML = '<span class="tag-folder selected" onclick="selectFolder(\'(Todos)\')">Todos</span>';
+        data.sources.forEach(src => {
+          if (src !== "(Todos)") {
+            const span = document.createElement('span');
+            span.className = 'tag-folder';
+            span.textContent = src;
+            span.onclick = () => selectFolder(src);
+            container.appendChild(span);
+          }
+        });
+      } catch (err) {
+        console.error("Error cargando fuentes:", err);
+      }
+    }
+
+    function selectFolder(folder) {
+      currentFolder = folder;
+      document.querySelectorAll('.tag-folder').forEach(el => {
+        el.classList.toggle('selected', el.textContent === folder || (folder === '(Todos)' && el.textContent === 'Todos'));
+      });
+    }
+
+    function newConversation() {
+      if (isStreaming) return;
+      document.getElementById('page-container').innerHTML = `
+        <div class="welcome-screen" id="welcome-screen">
+          <h1>¿Qué quieres consultar hoy?</h1>
+          <p>Tu asistente privado lee directamente de tus memorias de tesis, artículos de clase y repositorios de código sin que ningún dato salga de tu servidor.</p>
+        </div>
+      `;
+      document.getElementById('query-input').value = "";
+      document.getElementById('query-input').focus();
+    }
+
+    async function handleSend(e) {
+      e.preventDefault();
+      const input = document.getElementById('query-input');
+      const question = input.value.trim();
+      if (!question || isStreaming) return;
+
+      input.value = "";
+      isStreaming = true;
+      document.getElementById('send-button').disabled = true;
+
+      // Ocultar pantalla de bienvenida
+      const welcome = document.getElementById('welcome-screen');
+      if (welcome) welcome.remove();
+
+      // Guardar en barra lateral
+      addHistoryItem(question);
+
+      // Crear tarjeta de la nueva página/pregunta
+      const container = document.getElementById('page-container');
+      const entryId = "entry-" + Date.now();
+      const timeStr = new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+
+      const entryDiv = document.createElement('div');
+      entryDiv.className = 'entry-card';
+      entryDiv.id = entryId;
+      entryDiv.innerHTML = `
+        <div class="entry-meta">Página consultada · hoy, ${timeStr}</div>
+        <h2 class="entry-question">${escapeHtml(question)}</h2>
+        <div class="entry-answer typing-cursor" id="${entryId}-answer"></div>
+        <div class="sources-card" id="${entryId}-sources" style="display: none;">
+          <div class="sources-title">Fuentes consultadas</div>
+          <div id="${entryId}-sources-list"></div>
+        </div>
+        <div class="divider"></div>
+      `;
+      container.appendChild(entryDiv);
+
+      const scrollArea = document.getElementById('page-scroll');
+      scrollArea.scrollTop = scrollArea.scrollHeight;
+
+      const answerEl = document.getElementById(`${entryId}-answer`);
+      const sourcesCard = document.getElementById(`${entryId}-sources`);
+      const sourcesList = document.getElementById(`${entryId}-sources-list`);
+
+      try {
+        const response = await fetch('/api/chat', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            question: question,
+            source: currentFolder === "(Todos)" ? null : currentFolder,
+            top_k: 7
+          })
+        });
+
+        const reader = response.body.getReader();
+        const decoder = new TextDecoder();
+        let buffer = "";
+
+        while (true) {
+          const { value, done } = await reader.read();
+          if (done) break;
+
+          buffer += decoder.decode(value, { stream: true });
+          const lines = buffer.split('\n\n');
+          buffer = lines.pop(); // Mantener fragmentos incompletos
+
+          for (const line of lines) {
+            if (line.startsWith('data: ')) {
+              const data = JSON.parse(line.substring(6));
+
+              if (data.type === 'sources') {
+                // Renderizar fuentes
+                if (data.sources && data.sources.length > 0) {
+                  sourcesCard.style.display = 'flex';
+                  sourcesList.innerHTML = data.sources.map((s, idx) => `
+                    <div class="source-item">
+                      <span class="source-num">${idx + 1}</span>
+                      <div>
+                        <span class="source-path">${escapeHtml(s.path)}</span>
+                        <span class="source-details">· ${escapeHtml(s.detail)} (${s.score})</span>
+                      </div>
+                    </div>
+                  `).join('');
+                }
+              } else if (data.type === 'token') {
+                // Agregar token con streaming fluido en vivo
+                answerEl.textContent += data.text;
+                scrollArea.scrollTop = scrollArea.scrollHeight;
+              } else if (data.type === 'done') {
+                answerEl.classList.remove('typing-cursor');
+              }
+            }
+          }
+        }
+      } catch (err) {
+        answerEl.textContent += "\n[Error al conectar con el servidor]";
+        answerEl.classList.remove('typing-cursor');
+      } finally {
+        answerEl.classList.remove('typing-cursor');
+        isStreaming = false;
+        document.getElementById('send-button').disabled = false;
+        document.getElementById('query-input').focus();
+      }
+    }
+
+    function addHistoryItem(text) {
+      const container = document.getElementById('history-container');
+      const div = document.createElement('div');
+      div.className = 'history-item active';
+      div.textContent = text;
+      document.querySelectorAll('.history-item').forEach(el => el.classList.remove('active'));
+      container.prepend(div);
+    }
+
+    function escapeHtml(str) {
+      return str.replace(/[&<>'"]/g, tag => ({
+        '&': '&amp;', '<': '&lt;', '>': '&gt;', "'": '&#39;', '"': '&quot;'
+      }[tag] || tag));
+    }
+
+    loadSources();
+  </script>
+</body>
+</html>
