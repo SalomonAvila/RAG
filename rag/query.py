@@ -40,10 +40,28 @@ def _extract_tokens(text: str) -> list[str]:
         c for c in unicodedata.normalize("NFD", text.lower())
         if unicodedata.category(c) != "Mn"
     )
-    # Stopwords comunes
+    # Stopwords comunes en español (artículos, preposiciones, pronombres, verbos auxiliares)
     stopwords = {
-        "para", "como", "esta", "sobre", "entre", "donde", "cuando", "quien",
-        "cual", "este", "estos", "estas", "unos", "unas", "tener", "hacer", "decir"
+        "el", "la", "los", "las", "un", "una", "unos", "unas", "del", "al",
+        "a", "ante", "bajo", "cabe", "con", "contra", "de", "desde", "durante", "en",
+        "entre", "hacia", "hasta", "mediante", "para", "por", "segun", "sin", "so",
+        "sobre", "tras", "versus", "via", "y", "e", "ni", "o", "u", "pero", "sino",
+        "aunque", "porque", "pues", "que", "si",
+        "como", "cual", "cuales", "cuando", "cuanto", "cuanta", "cuantos", "cuantas",
+        "donde", "adonde", "quien", "quienes",
+        "este", "esta", "estos", "estas", "esto", "ese", "esa", "esos", "esas", "eso",
+        "aquel", "aquella", "aquellos", "aquellas", "aquello",
+        "mi", "mis", "tu", "tus", "su", "sus", "nuestro", "nuestra", "nuestros", "nuestras",
+        "me", "te", "se", "nos", "les", "le",
+        "ser", "es", "son", "era", "eran", "fue", "fueron", "sido", "siendo",
+        "estar", "estan", "estaba", "estaban", "estado", "estando",
+        "haber", "hay", "habia", "hubo", "haya", "he", "ha", "han", "hemos",
+        "hacer", "hace", "hacen", "hacia", "hizo", "hecho",
+        "tener", "tiene", "tienen", "tenia", "tuvo", "tenido",
+        "decir", "dice", "dicen", "dijo", "dicho",
+        "no", "ya", "muy", "mas", "menos", "bien", "mal", "asi", "tan", "tanto",
+        "tanta", "tantos", "tantas", "todo", "toda", "todos", "todas", "otro", "otra",
+        "otros", "otras", "mismo", "misma", "mismos", "mismas", "cada", "uno", "algo", "nada"
     }
     return [w for w in re.findall(r"\b[a-z0-9]+\b", text) if len(w) >= 3 and w not in stopwords]
 
@@ -120,8 +138,38 @@ def search(
 
     doc_corpus, df, distinct_paths = _get_corpus(qdrant)
 
-    # 1. Enrutamiento y expansión semántica universal con el LLM
+    base_filter = (
+        qm.Filter(must=[qm.FieldCondition(key="source", match=qm.MatchValue(value=source))])
+        if source
+        else None
+    )
+
+    # 1. Filtro Previo Rápido de Relevancia (Ruido Cero-Match):
+    # Si ninguno de los términos clave de la consulta existe en los documentos (léxico)
+    # y la similitud semántica pura de la pregunta está por debajo del umbral de ruido (0.64),
+    # no hay evidencia en la base de conocimientos. Retornar [] de inmediato sin invocar al router.
+    user_tokens = _extract_tokens(question)
+    has_lexical_presence = any(df.get(t, 0) > 0 for t in user_tokens) if user_tokens else False
+
+    if not has_lexical_presence:
+        raw_vector = llm.embed(
+            model=config.EMBED_MODEL,
+            input=config.QUERY_PREFIX + question
+        ).embeddings[0]
+        raw_res = qdrant.query_points(
+            collection_name=config.QDRANT_COLLECTION,
+            query=raw_vector,
+            query_filter=base_filter,
+            limit=1,
+            with_payload=False,
+        ).points
+        top_raw_score = raw_res[0].score if raw_res else 0.0
+        if top_raw_score < 0.64:
+            return []
+
+    # 2. Enrutamiento y expansión semántica universal con el LLM
     routed_paths: list[str] = []
+    routed_none = False
     expanded_query = question
 
     if distinct_paths:
@@ -134,11 +182,11 @@ Catálogo de documentos disponibles:
 Consulta del usuario: "{question}"
 
 Instrucciones:
-1. Determina qué archivo(s) del catálogo tienen relación directa con la consulta. Si la consulta es transversal, general o no menciona un tema específico, responde 'TODOS'.
-2. Genera de 6 a 12 términos clave, sinónimos y componentes específicos con los que esta información suele estar redactada en los documentos fuente (por ejemplo: si pregunta por calificación o evaluación de cursos, incluye los componentes típicos como parciales, quices, talleres, proyectos, porcentajes, ponderación, notas; si pregunta por arquitectura de software, incluye módulos, servicios, contratos, diagramas; si pregunta por investigación académica o tesis, incluye objetivos, hipótesis, metodología, métricas).
+1. Determina qué archivo(s) o carpetas del catálogo tienen relación directa con la consulta (por ejemplo, si consulta sobre una materia o tema, incluye los archivos de esa carpeta o materia). Si la consulta es transversal o general, responde 'TODOS'. Si ningún archivo del catálogo tiene relación con lo consultado, responde 'NINGUNO'.
+2. Genera de 6 a 12 términos clave, sinónimos y componentes específicos con los que esta información suele estar redactada en los documentos fuente (por ejemplo: si pregunta por calificación o evaluación de cursos, incluye parciales, quices, talleres, proyectos, notas, evaluación, porcentajes, ponderación; si pregunta por arquitectura, incluye módulos, servicios, contratos, diagramas; si pregunta por investigación o tesis, incluye objetivos, hipótesis, metodología, métricas).
 
 Responde ÚNICAMENTE en este formato exacto:
-DOCS: [archivos seleccionados separados por coma, o 'TODOS']
+DOCS: [archivos seleccionados separados por coma, o 'TODOS' o 'NINGUNO']
 EXPANSION: [términos y componentes separados por espacio]"""
 
             resp = llm.chat(
@@ -146,33 +194,33 @@ EXPANSION: [términos y componentes separados por espacio]"""
                 messages=[{"role": "user", "content": router_prompt}]
             )
             content = resp.message.content.strip()
+            docs_line = ""
+            exp_line = ""
             for line in content.splitlines():
-                if line.startswith("DOCS:"):
-                    docs_part = line.replace("DOCS:", "").strip()
-                    if "TODOS" not in docs_part.upper():
-                        for raw_name in docs_part.split(","):
-                            clean_name = raw_name.strip().lstrip("- ")
-                            for dp in distinct_paths:
-                                if clean_name and (clean_name in dp or dp.endswith(clean_name)):
-                                    routed_paths.append(dp)
-                elif line.startswith("EXPANSION:"):
-                    exp_part = line.replace("EXPANSION:", "").strip()
-                    if exp_part:
-                        expanded_query = f"{question} {exp_part}"
+                stripped = line.strip()
+                if stripped.startswith("DOCS:"):
+                    docs_line = stripped.replace("DOCS:", "").strip()
+                elif stripped.startswith("EXPANSION:"):
+                    exp_line = stripped.replace("EXPANSION:", "").strip()
+
+            routed_none = "NINGUNO" in docs_line.upper()
+            if not routed_none:
+                if "TODOS" not in docs_line.upper():
+                    for raw_name in docs_line.split(","):
+                        clean_name = raw_name.strip().lstrip("- ")
+                        for dp in distinct_paths:
+                            if clean_name and (clean_name in dp or dp.endswith(clean_name)):
+                                routed_paths.append(dp)
+                if exp_line and "NINGUNO" not in exp_line.upper():
+                    expanded_query = f"{question} {exp_line}"
         except Exception:
             pass
 
-    # 2. Búsqueda Vectorial Semántica
+    # 3. Búsqueda Vectorial Semántica
     search_vector = llm.embed(
         model=config.EMBED_MODEL,
         input=config.QUERY_PREFIX + expanded_query
     ).embeddings[0]
-
-    base_filter = (
-        qm.Filter(must=[qm.FieldCondition(key="source", match=qm.MatchValue(value=source))])
-        if source
-        else None
-    )
 
     candidate_depth = max(top_k * 5, 40)
     vector_results = qdrant.query_points(
@@ -183,7 +231,12 @@ EXPANSION: [términos y componentes separados por espacio]"""
         with_payload=True,
     ).points
 
-    # 3. Búsqueda Léxica BM25
+    top_vector_score = (
+        vector_results[0].score
+        if (vector_results and getattr(vector_results[0], "score", None) is not None)
+        else 0.0
+    )
+
     query_tokens = _extract_tokens(expanded_query)
     N = len(doc_corpus)
     avg_len = sum(len(toks) for _, toks in doc_corpus) / N if N > 0 else 1.0
@@ -216,6 +269,10 @@ EXPANSION: [términos y componentes separados por espacio]"""
 
     bm25_scores.sort(key=lambda x: x[0], reverse=True)
     bm25_results = [p for _, p in bm25_scores[:candidate_depth]]
+
+    # Si BM25 no obtuvo ninguna coincidencia y la similitud vectorial es baja
+    if not bm25_scores and top_vector_score < 0.64:
+        return []
 
     # 4. Fusión de Rangos Recíprocos Equilibrada (RRF calibrado con k=15)
     rrf_scores: dict[str, float] = {}
