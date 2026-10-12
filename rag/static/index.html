@@ -74,7 +74,16 @@
       font-size: 22px;
       flex-shrink: 0;
       box-shadow: var(--shadow-sm);
+      overflow: hidden;
     }
+
+    .brand-logo img {
+      width: 100%;
+      height: 100%;
+      object-fit: cover;
+      display: block;
+    }
+
 
     .brand-title {
       font-family: var(--font-heading);
@@ -395,7 +404,9 @@
   <!-- BARRA LATERAL -->
   <aside>
     <div class="brand-box">
-      <div class="brand-logo" id="logo-icon">A</div>
+      <div class="brand-logo" id="logo-icon">
+        <img src="/static/logo.png" alt="Logo" onerror="this.remove(); document.getElementById('logo-icon').innerText='A';">
+      </div>
       <div>
         <div class="brand-title">Tu Archivo</div>
         <div class="brand-sub">Homelab Local · qwen2.5:7b</div>
@@ -458,7 +469,8 @@
 
   <script>
     let currentFolder = "(Todos)";
-    let historyQuestions = [];
+    let conversations = []; // [{ id, question, answer, sources, timestamp }]
+    let activeConvId = null;
     let isStreaming = false;
 
     // Cargar fuentes disponibles de Qdrant al iniciar
@@ -489,8 +501,84 @@
       });
     }
 
+    function saveToLocalStorage() {
+      try {
+        localStorage.setItem('tu_archivo_convs', JSON.stringify(conversations));
+      } catch (e) {
+        console.warn("No se pudo guardar en localStorage", e);
+      }
+    }
+
+    function loadFromLocalStorage() {
+      try {
+        const saved = localStorage.getItem('tu_archivo_convs');
+        if (saved) {
+          conversations = JSON.parse(saved);
+          renderHistoryList();
+          if (conversations.length > 0) {
+            switchConversation(conversations[0].id);
+          }
+        }
+      } catch (e) {
+        console.warn("Error cargando de localStorage", e);
+      }
+    }
+
+    function renderHistoryList() {
+      const container = document.getElementById('history-container');
+      container.innerHTML = "";
+      conversations.forEach(conv => {
+        const div = document.createElement('div');
+        div.className = 'history-item' + (conv.id === activeConvId ? ' active' : '');
+        div.textContent = conv.question;
+        div.title = conv.question;
+        div.onclick = () => switchConversation(conv.id);
+        container.appendChild(div);
+      });
+    }
+
+    function switchConversation(id) {
+      if (isStreaming) return;
+      activeConvId = id;
+      renderHistoryList();
+
+      const conv = conversations.find(c => c.id === id);
+      if (!conv) return;
+
+      const container = document.getElementById('page-container');
+      container.innerHTML = `
+        <div class="entry-card" id="entry-${conv.id}">
+          <div class="entry-meta">Página consultada · ${escapeHtml(conv.timestamp)}</div>
+          <h2 class="entry-question">${escapeHtml(conv.question)}</h2>
+          <div class="entry-answer" id="entry-${conv.id}-answer">${escapeHtml(conv.answer)}</div>
+          <div class="sources-card" id="entry-${conv.id}-sources" style="display: ${conv.sources && conv.sources.length ? 'flex' : 'none'};">
+            <div class="sources-title">Fuentes consultadas</div>
+            <div id="entry-${conv.id}-sources-list">
+              ${(conv.sources || []).map((s, idx) => `
+                <div class="source-item">
+                  <span class="source-num">${idx + 1}</span>
+                  <div>
+                    <span class="source-path">${escapeHtml(s.path)}</span>
+                    <span class="source-details">· ${escapeHtml(s.detail)} (${s.score})</span>
+                  </div>
+                </div>
+              `).join('')}
+            </div>
+          </div>
+          <div class="divider"></div>
+        </div>
+      `;
+
+      const scrollArea = document.getElementById('page-scroll');
+      scrollArea.scrollTop = 0;
+      document.getElementById('query-input').focus();
+    }
+
     function newConversation() {
       if (isStreaming) return;
+      activeConvId = null;
+      renderHistoryList();
+
       document.getElementById('page-container').innerHTML = `
         <div class="welcome-screen" id="welcome-screen">
           <h1>¿Qué quieres consultar hoy?</h1>
@@ -515,35 +603,41 @@
       const welcome = document.getElementById('welcome-screen');
       if (welcome) welcome.remove();
 
-      // Guardar en barra lateral
-      addHistoryItem(question);
+      const timeStr = "hoy, " + new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+      const convId = "conv-" + Date.now();
+      activeConvId = convId;
 
-      // Crear tarjeta de la nueva página/pregunta
+      const currentConv = {
+        id: convId,
+        question: question,
+        answer: "",
+        sources: [],
+        timestamp: timeStr
+      };
+      conversations.unshift(currentConv);
+      renderHistoryList();
+
+      // Renderizar el contenedor actual
       const container = document.getElementById('page-container');
-      const entryId = "entry-" + Date.now();
-      const timeStr = new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
-
-      const entryDiv = document.createElement('div');
-      entryDiv.className = 'entry-card';
-      entryDiv.id = entryId;
-      entryDiv.innerHTML = `
-        <div class="entry-meta">Página consultada · hoy, ${timeStr}</div>
-        <h2 class="entry-question">${escapeHtml(question)}</h2>
-        <div class="entry-answer typing-cursor" id="${entryId}-answer"></div>
-        <div class="sources-card" id="${entryId}-sources" style="display: none;">
-          <div class="sources-title">Fuentes consultadas</div>
-          <div id="${entryId}-sources-list"></div>
+      container.innerHTML = `
+        <div class="entry-card" id="entry-${convId}">
+          <div class="entry-meta">Página consultada · ${escapeHtml(timeStr)}</div>
+          <h2 class="entry-question">${escapeHtml(question)}</h2>
+          <div class="entry-answer typing-cursor" id="entry-${convId}-answer"></div>
+          <div class="sources-card" id="entry-${convId}-sources" style="display: none;">
+            <div class="sources-title">Fuentes consultadas</div>
+            <div id="entry-${convId}-sources-list"></div>
+          </div>
+          <div class="divider"></div>
         </div>
-        <div class="divider"></div>
       `;
-      container.appendChild(entryDiv);
 
       const scrollArea = document.getElementById('page-scroll');
       scrollArea.scrollTop = scrollArea.scrollHeight;
 
-      const answerEl = document.getElementById(`${entryId}-answer`);
-      const sourcesCard = document.getElementById(`${entryId}-sources`);
-      const sourcesList = document.getElementById(`${entryId}-sources-list`);
+      const answerEl = document.getElementById(`entry-${convId}-answer`);
+      const sourcesCard = document.getElementById(`entry-${convId}-sources`);
+      const sourcesList = document.getElementById(`entry-${convId}-sources-list`);
 
       try {
         const response = await fetch('/api/chat', {
@@ -566,14 +660,14 @@
 
           buffer += decoder.decode(value, { stream: true });
           const lines = buffer.split('\n\n');
-          buffer = lines.pop(); // Mantener fragmentos incompletos
+          buffer = lines.pop();
 
           for (const line of lines) {
             if (line.startsWith('data: ')) {
               const data = JSON.parse(line.substring(6));
 
               if (data.type === 'sources') {
-                // Renderizar fuentes
+                currentConv.sources = data.sources || [];
                 if (data.sources && data.sources.length > 0) {
                   sourcesCard.style.display = 'flex';
                   sourcesList.innerHTML = data.sources.map((s, idx) => `
@@ -587,7 +681,7 @@
                   `).join('');
                 }
               } else if (data.type === 'token') {
-                // Agregar token con streaming fluido en vivo
+                currentConv.answer += data.text;
                 answerEl.textContent += data.text;
                 scrollArea.scrollTop = scrollArea.scrollHeight;
               } else if (data.type === 'done') {
@@ -597,32 +691,28 @@
           }
         }
       } catch (err) {
-        answerEl.textContent += "\n[Error al conectar con el servidor]";
+        const errText = "\n[Error al conectar con el servidor]";
+        currentConv.answer += errText;
+        answerEl.textContent += errText;
         answerEl.classList.remove('typing-cursor');
       } finally {
         answerEl.classList.remove('typing-cursor');
         isStreaming = false;
         document.getElementById('send-button').disabled = false;
         document.getElementById('query-input').focus();
+        saveToLocalStorage();
       }
     }
 
-    function addHistoryItem(text) {
-      const container = document.getElementById('history-container');
-      const div = document.createElement('div');
-      div.className = 'history-item active';
-      div.textContent = text;
-      document.querySelectorAll('.history-item').forEach(el => el.classList.remove('active'));
-      container.prepend(div);
-    }
-
     function escapeHtml(str) {
-      return str.replace(/[&<>'"]/g, tag => ({
+      if (!str) return "";
+      return String(str).replace(/[&<>'"]/g, tag => ({
         '&': '&amp;', '<': '&lt;', '>': '&gt;', "'": '&#39;', '"': '&quot;'
       }[tag] || tag));
     }
 
     loadSources();
+    loadFromLocalStorage();
   </script>
 </body>
 </html>

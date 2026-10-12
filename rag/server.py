@@ -16,6 +16,7 @@ import ollama
 import uvicorn
 from fastapi import FastAPI
 from fastapi.responses import FileResponse, StreamingResponse
+from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel
 from qdrant_client import QdrantClient
 
@@ -39,6 +40,8 @@ def get_available_sources(qdrant: QdrantClient) -> list[str]:
 app = FastAPI(title="Tu Archivo · RAG Local")
 
 STATIC_DIR = Path(__file__).resolve().parent / "static"
+app.mount("/static", StaticFiles(directory=STATIC_DIR), name="static")
+
 
 
 class QueryRequest(BaseModel):
@@ -50,6 +53,7 @@ class QueryRequest(BaseModel):
 @app.get("/")
 async def get_index():
     return FileResponse(STATIC_DIR / "index.html")
+
 
 
 @app.get("/api/sources")

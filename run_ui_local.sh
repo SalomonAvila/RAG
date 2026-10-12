@@ -3,6 +3,11 @@
 # Esto canaliza las consultas a Qdrant y Ollama en la torre sin consumir GPU ni RAM local.
 set -e
 
+echo "🔄 0. Sincronizando repositorio local con GitHub..."
+if git rev-parse --is-inside-work-tree >/dev/null 2>&1; then
+  git pull origin main || echo "⚠️ Advertencia: No se pudo hacer git pull (¿sin internet o cambios locales?), continuando..."
+fi
+
 REMOTE_HOST="${RAG_REMOTE_HOST:-192.168.80.85}"
 REMOTE_USER="${RAG_REMOTE_USER:-homelab}"
 PORT_QDRANT=6334
