@@ -3,6 +3,15 @@
 # Esto canaliza las consultas a Qdrant y Ollama en la torre sin consumir GPU ni RAM local.
 set -e
 
+DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+cd "$DIR"
+
+if [ -f "$DIR/.env" ]; then
+  set -a
+  source "$DIR/.env" 2>/dev/null || . "$DIR/.env"
+  set +a
+fi
+
 echo "🔄 0. Sincronizando repositorio local con GitHub..."
 if git rev-parse --is-inside-work-tree >/dev/null 2>&1; then
   git pull origin main || echo "⚠️ Advertencia: No se pudo hacer git pull (¿sin internet o cambios locales?), continuando..."

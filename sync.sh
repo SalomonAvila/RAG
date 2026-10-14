@@ -2,6 +2,13 @@
 # Script para sincronizar tus documentos locales con el servidor homelab e indexar automáticamente.
 set -e
 
+DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+if [ -f "$DIR/.env" ]; then
+  set -a
+  source "$DIR/.env" 2>/dev/null || . "$DIR/.env"
+  set +a
+fi
+
 SOURCE_DIR="${1:-$HOME/Documentos/documentosRag}"
 REMOTE_HOST="${RAG_REMOTE_HOST:-192.168.80.85}"
 REMOTE_USER="${RAG_REMOTE_USER:-homelab}"

@@ -5,6 +5,12 @@ set -e
 DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 cd "$DIR"
 
+if [ -f "$DIR/.env" ]; then
+  set -a
+  source "$DIR/.env" 2>/dev/null || . "$DIR/.env"
+  set +a
+fi
+
 echo "🔄 0. Verificando actualizaciones en GitHub..."
 if git rev-parse --is-inside-work-tree >/dev/null 2>&1; then
   git pull origin main || echo "⚠️ Advertencia: No se pudo hacer git pull, continuando..."
@@ -16,7 +22,6 @@ if [ -f "$DIR/rag/static/logo.png" ]; then
   mkdir -p "$HOME/.local/share/icons/hicolor/512x512/apps/"
   cp "$DIR/rag/static/logo.png" "$HOME/.local/share/icons/hicolor/512x512/apps/tu-archivo.png" 2>/dev/null || true
 fi
-
 
 REMOTE_HOST="${RAG_REMOTE_HOST:-192.168.80.85}"
 REMOTE_USER="${RAG_REMOTE_USER:-homelab}"
