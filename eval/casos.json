@@ -1,0 +1,63 @@
+[
+  {
+    "pregunta": "¿Cómo es la calificación en aprendizaje de máquina?",
+    "esperado": [
+      {
+        "ruta": "AprendizajeDeMaquina/C1 - Introducción.pdf",
+        "pagina": 9
+      }
+    ]
+  },
+  {
+    "pregunta": "¿En qué semana es el primer parcial de aprendizaje de máquina?",
+    "esperado": [
+      {
+        "ruta": "AprendizajeDeMaquina/C1 - Introducción.pdf",
+        "pagina": 13
+      }
+    ]
+  },
+  {
+    "pregunta": "¿Se puede usar ChatGPT u otros modelos de lenguaje en el curso de aprendizaje de máquina?",
+    "esperado": [
+      {
+        "ruta": "AprendizajeDeMaquina/C1 - Introducción.pdf",
+        "pagina": 7
+      }
+    ]
+  },
+  {
+    "pregunta": "¿Cuáles son los objetivos pedagógicos del curso de aprendizaje de máquina?",
+    "esperado": [
+      {
+        "ruta": "AprendizajeDeMaquina/C1 - Introducción.pdf",
+        "pagina": 6
+      }
+    ]
+  },
+  {
+    "pregunta": "¿Qué dice Breiman sobre las dos culturas del modelado estadístico?",
+    "esperado": [
+      {
+        "ruta": "AprendizajeDeMaquina/C1 - Introducción.pdf",
+        "pagina": 51
+      }
+    ]
+  },
+  {
+    "pregunta": "¿Cuáles son los trade-offs de usar Kafka en javer-ia-nos?",
+    "esperado": [
+      {
+        "ruta": "docs/arch-description.typ"
+      }
+    ]
+  },
+  {
+    "pregunta": "¿Qué decidieron sobre el frontend universal con librería compartida?",
+    "esperado": [
+      {
+        "ruta": "docs/arch-description.typ"
+      }
+    ]
+  }
+]

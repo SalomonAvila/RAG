@@ -8,25 +8,32 @@ Sistema RAG (Retrieval-Augmented Generation) 100% privado, local y modular para 
 
 - **Búsqueda Híbrida Inteligente (Dense Vector + BM25 con RRF):**
   Combina la búsqueda vectorial semántica densa (`nomic-embed-text`) con búsqueda léxica BM25 (calibrada para palabras clave exactas, código, nombres propios y rutas de archivo) mediante *Reciprocal Rank Fusion* (RRF, $k=15$).
-- **Enrutamiento y Expansión Semántica Universal:**
-  El LLM analiza dinámicamente la consulta frente al catálogo de documentos disponibles, enrutando a los archivos relevantes y enriqueciendo la búsqueda con términos específicos, componentes y sinónimos formales o académicos (por ejemplo, si se consulta por "calificación", mapea automáticamente a "parciales, quices, talleres, proyectos, notas, ponderación").
+- **Enrutamiento, Expansión Semántica y Preguntas de Seguimiento:**
+  En un solo llamado, el LLM reescribe las preguntas de seguimiento como consultas autocontenidas ("¿y la segunda?" → la pregunta completa), elige las carpetas relevantes del catálogo y enriquece la búsqueda con términos específicos, componentes y sinónimos formales o académicos (por ejemplo, si se consulta por "calificación", mapea automáticamente a "parciales, quices, talleres, proyectos, notas, ponderación").
 - **Filtro de Ruido Cero-Match (Zero-Match Guard):**
   Si una consulta trata sobre una entidad o tema que no existe en tus documentos (presencia léxica nula) y su similitud semántica pura no supera el piso de ruido de fondo ($< 0.64$), el sistema responde de inmediato sin inventar respuestas ni traer fragmentos no relacionados.
-- **Poda Dinámica de Fuentes (Dynamic Relevance Cutoff):**
-  En lugar de forzar un número fijo arbitrario de fuentes, el motor selecciona automáticamente solo los fragmentos con alta relevancia relativa ($\ge 65\%$ del mejor puntaje) y descarta caídas abruptas ($< 25\%$).
+- **Modo Documento:**
+  Si la pregunta nombra un archivo (p. ej. "¿qué dice arch-description?"), la búsqueda se restringe a ese archivo y se envía al LLM su índice de títulos, para que pueda dar una visión general y no solo dos fragmentos sueltos.
+- **Fragmentos con Sección:**
+  En Typst y Markdown cada fragmento guarda la ruta de títulos vigente (`Decisiones > ADR-04: Kafka`), que se usa en el embedding y en el contexto del LLM. Los títulos sueltos al final de un fragmento se eliminan para que el modelo no atribuya contenido a la sección equivocada.
+- **Reranker Multilingüe (Cross-Encoder):**
+  Los mejores candidatos de RRF se reordenan con **`BAAI/bge-reranker-v2-m3`** (int8, vía `fastembed`, en CPU, ~2.5 s para 8 candidatos) usando la consulta expandida por el router. Se conservan solo los fragmentos con probabilidad de relevancia $\ge 50\%$ de la mejor. Sin reranker, se usa un corte por RRF ($\ge 65\%$ del mejor puntaje, sin caídas $> 25\%$).
 - **Indexación Incremental con [CocoIndex](https://cocoindex.io/):**
   Detección de cambios a nivel de archivo mediante *fingerprints* criptográficos. Actualiza exclusivamente los fragmentos modificados en la base vectorial (tiempo de re-indexación si no hay cambios: **0.0s**).
 - **Soporte Multiformato de Alto Rendimiento:**
-  - **PDFs:** Procesamiento acelerado en C/C++ con **PyMuPDF (`fitz`)**, extrayendo cientos de páginas en fracciones de segundo.
+  - **PDFs:** Procesamiento acelerado en C/C++ con **PyMuPDF (`fitz`)**. Las páginas consecutivas se agrupan hasta ~1500 bytes, para que las diapositivas con poco texto no generen fragmentos casi vacíos.
+  - Cada fragmento se embebe con su ruta como cabecera (`Archivo: Materia/clase.pdf`), lo que da contexto a fragmentos ambiguos.
   - **Word (`.docx`):** Extracción completa de párrafos y tablas estructuradas.
   - **Documentos académicos y texto:** Markdown (`.md`, `.mdx`), Typst (`.typ`), BibTeX (`.bib`), texto plano (`.txt`, `.rst`).
-  - **Código fuente:** Soporte para más de 25 lenguajes (`.py`, `.ts`, `.go`, `.rs`, `.c`, `.cpp`, `.sh`, `.sql`, etc.).
-- **Interfaz Gráfica Moderna ("Tu Archivo"):**
-  - Backend en **FastAPI** con streaming en tiempo real (Server-Sent Events / SSE).
-  - Renderizado completo de Markdown con botón para copiar bloques de código.
-  - Persistencia de múltiples conversaciones en el navegador (*LocalStorage*).
-  - Detalle visual de fuentes consultadas con página o líneas exactas y puntaje de relevancia.
-  - Aplicación de escritorio nativa para Linux (Fedora/GNOME) con integración de ventana e icono del sistema vía WebKit2GTK.
+  - **Código fuente:** Soporte para más de 25 lenguajes (`.py`, `.ts`, `.go`, `.rs`, `.c`, `.cpp`, `.sh`, `.sql`, etc.). De los notebooks (`.ipynb`) se indexan solo las celdas, sin salidas ni metadatos.
+- **Interfaz Gráfica ("Tu Archivo")**, diseñada con los principios de interfaz de Apple:
+  - Backend en **FastAPI** con streaming en tiempo real (Server-Sent Events / SSE); las respuestas se pueden detener.
+  - Tipografía del sistema con interletrado según el tamaño, modo claro/oscuro automático y materiales translúcidos (barra superior y campo de pregunta flotantes).
+  - Animaciones con resortes críticamente amortiguados, respuesta inmediata al presionar y soporte para movimiento reducido, transparencia reducida y alto contraste.
+  - Markdown saneado con DOMPurify y botón para copiar bloques de código. Sin dependencias externas: `marked` y DOMPurify se sirven desde `rag/static/vendor/`, así que la interfaz no hace peticiones a internet.
+  - Conversaciones guardadas en el navegador (*LocalStorage*), con deshacer al eliminar.
+  - Fuentes desplegables con archivo, carpeta y página o líneas exactas.
+  - Aplicación de escritorio nativa para Linux (Fedora/GNOME) vía WebKit2GTK, que sigue el modo claro/oscuro del sistema.
 - **Modelos Locales en Ollama:**
   - Generación: **`qwen2.5:7b`** (configurable a cualquier modelo local).
   - Embeddings: **`nomic-embed-text`** con prefijos optimizados (`search_query:` / `search_document:`).
@@ -44,15 +51,19 @@ Sistema RAG (Retrieval-Augmented Generation) 100% privado, local y modular para 
 ├── run_ui_local.sh        # Lanzador de la aplicación web para navegador + túnel SSH
 ├── .env.example           # Plantilla de variables de configuración
 ├── .gitignore             # Exclusión de almacenamiento local, cachés y variables
+├── eval/
+│   └── casos.json         # Casos de evaluación: pregunta → archivo/página esperados
 └── rag/
     ├── __init__.py
     ├── config.py          # Configuración de modelos, umbrales, extensiones y rutas
     ├── indexer.py         # Pipeline de indexación incremental con CocoIndex
     ├── query.py           # Motor de búsqueda híbrida (RRF, BM25, enrutamiento, guardas) y CLI
+    ├── eval.py            # Evaluación de la recuperación (aciertos, MRR, latencia)
     ├── server.py          # Backend FastAPI con streaming SSE y API de chat
     ├── app_window.py      # Ventana nativa GTK3/WebKit2GTK para escritorio
     └── static/            # Frontend SPA (HTML5, CSS, JS, logo)
         ├── index.html     # Interfaz web con historial, markdown y streaming
+        ├── vendor/        # marked y DOMPurify servidos localmente
         ├── logo.png       # Logo de la aplicación
         └── logo.svg       # Vector original del logo
 ```
@@ -131,9 +142,51 @@ QDRANT_URL=http://localhost:6334
 OLLAMA_URL=http://localhost:11434
 LLM_MODEL=qwen2.5:7b
 EMBED_MODEL=nomic-embed-text
+
+# Opcionales (valores por defecto)
+LLM_NUM_CTX=8192            # ventana de contexto del LLM (Ollama usa 4096 si no se indica)
+OLLAMA_KEEP_ALIVE=30m       # tiempo que los modelos quedan cargados entre consultas
+EMBED_NUM_GPU=0             # 0 = embeddings de consulta en CPU (deja la VRAM al LLM)
+NOISE_FLOOR=0.64            # similitud mínima cuando no hay coincidencias léxicas
+RERANK_MODEL=BAAI/bge-reranker-v2-m3-int8   # vacío = sin reranker
+RERANK_CANDIDATES=8
+RERANK_KEEP_RATIO=0.5
 ```
 
 Todos los scripts (`run_app.sh`, `run_ui_local.sh`, `sync.sh`) leen automáticamente estas variables desde tu archivo `.env`.
+
+---
+
+## Ajustes de Ollama para GPUs de 6 GB
+
+Con una GPU de 6 GB (p. ej. GTX 1660 Super), `qwen2.5:7b` y `nomic-embed-text` no caben juntos con un contexto de 8k. Si ambos van a GPU, Ollama los alterna en VRAM en cada consulta (decenas de segundos por pregunta). Por eso las consultas embeben en CPU (`EMBED_NUM_GPU=0`) y conviene comprimir la caché KV del LLM en el servidor:
+
+```bash
+sudo systemctl edit ollama
+```
+```ini
+[Service]
+Environment="OLLAMA_FLASH_ATTENTION=1"
+Environment="OLLAMA_KV_CACHE_TYPE=q8_0"
+```
+```bash
+sudo systemctl restart ollama
+ollama ps   # tras una consulta: qwen2.5:7b debe aparecer con PROCESSOR = 100% GPU y CONTEXT = 8192
+```
+
+---
+
+## Evaluación de la Recuperación
+
+`eval/casos.json` contiene preguntas con el archivo (y la página, en PDFs) donde está la respuesta. Antes de cambiar umbrales o modelos, mide:
+
+```bash
+uv run python -m rag.eval                  # con reranker
+uv run python -m rag.eval --sin-reranker   # solo RRF, para comparar
+uv run python -m rag.eval -v               # muestra lo recuperado en cada caso
+```
+
+Reporta aciertos, MRR, fragmentos promedio y latencia. Conviene tener 20–30 casos reales de distintas materias y repositorios.
 
 ---
 
@@ -207,4 +260,9 @@ Abre en tu navegador:
 - **Inspeccionar fragmentos recuperados sin invocar al LLM:**
   ```bash
   uv run python -m rag.query --solo-buscar "algoritmo de búsqueda"
+  ```
+
+- **Comparar sin reranker:**
+  ```bash
+  uv run python -m rag.query --solo-buscar --sin-reranker "algoritmo de búsqueda"
   ```

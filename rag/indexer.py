@@ -14,6 +14,7 @@ from __future__ import annotations
 import asyncio
 import io
 import pathlib
+import re
 from typing import AsyncIterator
 
 import cocoindex as coco
@@ -47,11 +48,11 @@ async def coco_lifespan(builder: coco.EnvironmentBuilder) -> AsyncIterator[None]
     yield
 
 
-def _extract_pdf_pages(data: bytes) -> list[tuple[int | None, str]]:
+def _extract_pdf_pages(data: bytes) -> list[tuple[int, str]]:
     import pymupdf  # Motor en C/C++ ultrarrápido
 
     doc = pymupdf.open(stream=data, filetype="pdf")
-    pages: list[tuple[int | None, str]] = []
+    pages: list[tuple[int, str]] = []
     for i, page in enumerate(doc, start=1):
         try:
             text = page.get_text() or ""
@@ -62,8 +63,34 @@ def _extract_pdf_pages(data: bytes) -> list[tuple[int | None, str]]:
     return pages
 
 
+def _group_pdf_pages(pages: list[tuple[int, str]]) -> list[tuple[int, int, str]]:
+    """Agrupa páginas consecutivas hasta ~CHUNK_SIZE bytes.
+
+    En diapositivas cada página trae muy poco texto; indexarlas por separado produce
+    fragmentos casi vacíos (sólo el título) que dominan la búsqueda léxica.
+    Devuelve (página_inicial, página_final, texto).
+    """
+    groups: list[tuple[int, int, str]] = []
+    buf: list[str] = []
+    size = 0
+    start = end = 0
+    for page, text in pages:
+        text = text.strip()
+        text_size = len(text.encode())
+        if buf and size + text_size > config.CHUNK_SIZE:
+            groups.append((start, end, "\n\n".join(buf)))
+            buf, size = [], 0
+        if not buf:
+            start = page
+        buf.append(text)
+        size += text_size
+        end = page
+    if buf:
+        groups.append((start, end, "\n\n".join(buf)))
+    return groups
+
+
 def _extract_docx_text(data: bytes) -> str:
-    import io
     import docx
 
     doc = docx.Document(io.BytesIO(data))
@@ -76,6 +103,73 @@ def _extract_docx_text(data: bytes) -> str:
     return "\n\n".join(paragraphs)
 
 
+def _extract_notebook_text(raw: str) -> str:
+    """Extrae sólo el código y el markdown de un .ipynb (sin metadatos ni salidas en base64)."""
+    import json
+
+    try:
+        nb = json.loads(raw)
+    except json.JSONDecodeError:
+        return raw
+    cells = []
+    for cell in nb.get("cells", []):
+        src = cell.get("source", "")
+        src = "".join(src) if isinstance(src, list) else src
+        if src.strip():
+            cells.append(src if cell.get("cell_type") == "code" else f'"""\n{src}\n"""')
+    return "\n\n".join(cells)
+
+
+_HEADING_RE = {
+    "typst": re.compile(r"^(=+)\s+(.+?)\s*$"),
+    "markdown": re.compile(r"^(#{1,6})\s+(.+?)\s*#*\s*$"),
+}
+
+
+def _headings(text: str, language: str | None) -> list[tuple[int, int, str]]:
+    """Títulos del documento como (línea, nivel, título), con líneas desde 1."""
+    pattern = _HEADING_RE.get(language or "")
+    if pattern is None:
+        return []
+    found = []
+    in_code = False
+    for line_no, line in enumerate(text.splitlines(), start=1):
+        if line.lstrip().startswith("```"):
+            in_code = not in_code
+            continue
+        m = None if in_code else pattern.match(line)
+        if m:
+            found.append((line_no, len(m.group(1)), m.group(2)))
+    return found
+
+
+def _section_at(headings: list[tuple[int, int, str]], line: int) -> str | None:
+    """Ruta de títulos vigente en una línea, p.ej. "Decisiones > ADR-04: Kafka"."""
+    stack: list[tuple[int, str]] = []
+    for line_no, level, title in headings:
+        if line_no > line:
+            break
+        while stack and stack[-1][0] >= level:
+            stack.pop()
+        stack.append((level, title))
+    return " > ".join(title for _, title in stack) or None
+
+
+def _strip_trailing_headings(text: str, language: str | None) -> tuple[str, int]:
+    """Quita títulos sueltos al final de un fragmento: pertenecen al fragmento siguiente
+    y hacen que el LLM atribuya este contenido a la sección equivocada.
+    Devuelve el texto y cuántas líneas se quitaron."""
+    pattern = _HEADING_RE.get(language or "")
+    if pattern is None:
+        return text, 0
+    lines = text.rstrip().splitlines()
+    removed = 0
+    while len(lines) > 1 and (not lines[-1].strip() or pattern.match(lines[-1])):
+        lines.pop()
+        removed += 1
+    return "\n".join(lines), removed
+
+
 @coco.fn
 async def process_chunk(
     chunk: Chunk,
@@ -83,22 +177,32 @@ async def process_chunk(
     source: str,
     language: str | None,
     page: int | None,
+    page_end: int | None,
+    headings: list[tuple[int, int, str]],
     id_gen: IdGenerator,
     target: qdrant.CollectionTarget,
 ) -> None:
-    embedding = await coco.use_context(EMBEDDER).embed(config.DOC_PREFIX + chunk.text)
+    text, removed = _strip_trailing_headings(chunk.text, language)
+    section = _section_at(headings, chunk.start.line)
+    # La ruta y la sección dan contexto a fragmentos que por sí solos son ambiguos
+    # ("Parcial 1: 20%", "Consecuencias positivas: ...").
+    embedding = await coco.use_context(EMBEDDER).embed(
+        config.DOC_PREFIX + config.chunk_header(rel_path, section) + text
+    )
     target.declare_point(
         qdrant.PointStruct(
-            id=await id_gen.next_id(chunk.text),
+            id=await id_gen.next_id(text),
             vector=embedding.tolist(),
             payload={
                 "path": rel_path,
                 "source": source,
                 "language": language,
                 "page": page,
+                "page_end": page_end,
+                "section": section,
                 "start_line": chunk.start.line,
-                "end_line": chunk.end.line,
-                "text": chunk.text,
+                "end_line": chunk.end.line - removed,
+                "text": text,
             },
         )
     )
@@ -107,6 +211,13 @@ async def process_chunk(
 @coco.fn(memo=True)  # memo: si el archivo no cambió, no se vuelve a procesar
 async def process_file(file: FileLike, target: qdrant.CollectionTarget) -> None:
     path = file.file_path.path
+    # walk_dir entrega rutas absolutas cuando la fuente es un Path; se guardan relativas
+    # a RAG_SOURCE_DIR para que "source" sea la carpeta de primer nivel y no "/".
+    if path.is_absolute():
+        for base in (config.SOURCE_DIR, config.SOURCE_DIR.resolve()):
+            if path.is_relative_to(base):
+                path = path.relative_to(base)
+                break
     rel_path = path.as_posix()
     # "source" = primera carpeta dentro de RAG_SOURCE_DIR (p.ej. el nombre del repo o materia)
     source = path.parts[0] if len(path.parts) > 1 else "(raíz)"
@@ -118,31 +229,42 @@ async def process_file(file: FileLike, target: qdrant.CollectionTarget) -> None:
     if size > (config.MAX_PDF_FILE_BYTES if (is_pdf or is_docx) else config.MAX_TEXT_FILE_BYTES):
         return
 
+    # Secciones a trocear: (página inicial, página final, texto)
+    sections: list[tuple[int | None, int | None, str]]
     if is_pdf:
         pages = await asyncio.to_thread(_extract_pdf_pages, await file.read())
+        sections = list(_group_pdf_pages(pages))
         language = None
     elif is_docx:
         text = await asyncio.to_thread(_extract_docx_text, await file.read())
-        pages = [(None, text)]
+        sections = [(None, None, text)]
         language = None
     else:
         text = await file.read_text()
         if "\x00" in text:  # binario disfrazado
             return
-        pages = [(None, text)]
-        language = detect_code_language(filename=path.name)
+        if suffix == ".ipynb":
+            text = _extract_notebook_text(text)
+            language = "python"
+        else:
+            language = detect_code_language(filename=path.name)
+        sections = [(None, None, text)]
 
+    split_language = language or ("markdown" if suffix in (".md", ".mdx") else None)
     id_gen = IdGenerator()
-    for page, text in pages:
+    for page, page_end, text in sections:
         chunks = _splitter.split(
             text,
             chunk_size=config.CHUNK_SIZE,
             min_chunk_size=config.MIN_CHUNK_SIZE,
             chunk_overlap=config.CHUNK_OVERLAP,
-            language=language or ("markdown" if path.suffix.lower() in (".md", ".mdx") else None),
+            language=split_language,
         )
         chunks = [c for c in chunks if c.text.strip()]
-        await coco.map(process_chunk, chunks, rel_path, source, language, page, id_gen, target)
+        headings = _headings(text, split_language)
+        await coco.map(
+            process_chunk, chunks, rel_path, source, split_language, page, page_end, headings, id_gen, target
+        )
 
 
 @coco.fn

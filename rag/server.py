@@ -9,8 +9,10 @@ Uso:
 from __future__ import annotations
 
 import json
+import threading
+from contextlib import asynccontextmanager
 from pathlib import Path
-from typing import AsyncGenerator
+from typing import Iterator
 
 import ollama
 import uvicorn
@@ -21,27 +23,23 @@ from pydantic import BaseModel
 from qdrant_client import QdrantClient
 
 from rag import config
-from rag.query import SYSTEM_PROMPT, _location, search
+from rag.query import build_messages, get_corpus, location_detail, search, stream_answer, warm_up_reranker
 
 
-def get_available_sources(qdrant: QdrantClient) -> list[str]:
-    try:
-        results, _ = qdrant.scroll(
-            collection_name=config.QDRANT_COLLECTION,
-            limit=200,
-            with_payload=["source"],
-        )
-        sources = sorted({p.payload["source"] for p in results if p.payload and "source" in p.payload})
-        return ["(Todos)"] + sources
-    except Exception:
-        return ["(Todos)"]
+@asynccontextmanager
+async def lifespan(_app: FastAPI):
+    # Cargar el cross-encoder en segundo plano para que la primera pregunta no lo espere.
+    threading.Thread(target=warm_up_reranker, daemon=True).start()
+    yield
 
 
-app = FastAPI(title="Tu Archivo · RAG Local")
+app = FastAPI(title="Tu Archivo · RAG Local", lifespan=lifespan)
 
 STATIC_DIR = Path(__file__).resolve().parent / "static"
 app.mount("/static", StaticFiles(directory=STATIC_DIR), name="static")
 
+qdrant = QdrantClient(url=config.QDRANT_URL, prefer_grpc=True, check_compatibility=False)
+llm = ollama.Client(host=config.OLLAMA_URL)
 
 
 class QueryRequest(BaseModel):
@@ -56,67 +54,51 @@ async def get_index():
     return FileResponse(STATIC_DIR / "index.html")
 
 
-
+# Los endpoints que hablan con Qdrant/Ollama son síncronos (def): FastAPI los ejecuta en un
+# threadpool y no bloquean el event loop mientras el LLM genera.
 @app.get("/api/sources")
-async def api_sources():
-    qdrant = QdrantClient(url=config.QDRANT_URL, prefer_grpc=True, check_compatibility=False)
-    sources = get_available_sources(qdrant)
-    return {"sources": sources}
+def api_sources():
+    try:
+        sources = get_corpus(qdrant).sources
+    except Exception:
+        sources = []
+    return {"sources": ["(Todos)"] + sources}
+
+
+def _sse(payload: dict) -> str:
+    return f"data: {json.dumps(payload)}\n\n"
 
 
 @app.post("/api/chat")
-async def api_chat(req: QueryRequest):
-    qdrant = QdrantClient(url=config.QDRANT_URL, prefer_grpc=True, check_compatibility=False)
-    llm = ollama.Client(host=config.OLLAMA_URL)
+def api_chat(req: QueryRequest):
+    history = req.messages or []
+    points = search(qdrant, llm, req.question, top_k=req.top_k, source=req.source, history=history)
 
-    points = search(qdrant, llm, req.question, top_k=req.top_k, source=req.source)
-
-    async def event_generator() -> AsyncGenerator[str, None]:
+    def event_generator() -> Iterator[str]:
         # 1. Enviar primero la lista de fuentes consultadas para que el front las prepare
-        sources_payload = []
-        context_blocks = []
-        for i, pt in enumerate(points, start=1):
-            p = pt.payload or {}
-            loc = _location(p)
-            score = f"{pt.score:.3f}" if pt.score is not None else "1.000"
-            sources_payload.append({
-                "index": i,
-                "path": p.get("path", "?"),
-                "detail": f"pág. {p.get('page')}" if p.get("page") else f"L{p.get('start_line')}-{p.get('end_line')}",
-                "score": score,
-            })
-            context_blocks.append(f"[{i}] {loc}\n{p.get('text', '')}")
-
-        yield f"data: {json.dumps({'type': 'sources', 'sources': sources_payload})}\n\n"
+        yield _sse({
+            "type": "sources",
+            "sources": [
+                {
+                    "index": i,
+                    "path": (pt.payload or {}).get("path", "?"),
+                    "detail": location_detail(pt.payload or {}),
+                    "score": f"{pt.score:.3f}",
+                }
+                for i, pt in enumerate(points, start=1)
+            ],
+        })
 
         if not points:
-            yield f"data: {json.dumps({'type': 'token', 'text': 'No se encontraron documentos relevantes para esta consulta.'})}\n\n"
-            yield f"data: {json.dumps({'type': 'done'})}\n\n"
+            yield _sse({"type": "token", "text": "No se encontraron documentos relevantes para esta consulta."})
+            yield _sse({"type": "done"})
             return
 
-        context_str = "\n\n---\n\n".join(context_blocks)
-        prompt_user = f"Contexto de documentos recuperados:\n\n{context_str}\n\nPregunta actual: {req.question}"
-
-        messages = [{"role": "system", "content": SYSTEM_PROMPT}]
-
-        # Incluir historial previo de la conversación si existe (hasta los últimos 6 turnos para mantener foco)
-        if req.messages:
-            prev_turns = req.messages[-6:]
-            for m in prev_turns:
-                role = m.get("role", "user")
-                content = m.get("content", "")
-                if role in ("user", "assistant") and content:
-                    messages.append({"role": role, "content": content})
-
-        messages.append({"role": "user", "content": prompt_user})
-
         # 2. Transmitir token a token en tiempo real mientras el LLM los produce
+        for token in stream_answer(llm, build_messages(req.question, points, history)):
+            yield _sse({"type": "token", "text": token})
 
-        for part in llm.chat(model=config.LLM_MODEL, messages=messages, stream=True):
-            token_text = part.message.content
-            yield f"data: {json.dumps({'type': 'token', 'text': token_text})}\n\n"
-
-        yield f"data: {json.dumps({'type': 'done'})}\n\n"
+        yield _sse({"type": "done"})
 
     return StreamingResponse(event_generator(), media_type="text/event-stream")
 
