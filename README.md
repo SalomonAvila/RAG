@@ -111,6 +111,32 @@ mkdir -p ~/rag-data/mis-repos
 
 ---
 
+## Configuración y Variables de Entorno (`.env`)
+
+Copia la plantilla `.env.example` a `.env` para personalizar la conexión a tu servidor homelab y las opciones del motor:
+
+```bash
+cp .env.example .env
+```
+
+Variables principales:
+```env
+# Conexión al servidor Homelab (para túnel SSH y rsync)
+RAG_REMOTE_HOST=192.168.80.85
+RAG_REMOTE_USER=homelab
+
+# Parámetros del motor RAG
+RAG_SOURCE_DIR=~/rag-data
+QDRANT_URL=http://localhost:6334
+OLLAMA_URL=http://localhost:11434
+LLM_MODEL=qwen2.5:7b
+EMBED_MODEL=nomic-embed-text
+```
+
+Todos los scripts (`run_app.sh`, `run_ui_local.sh`, `sync.sh`) leen automáticamente estas variables desde tu archivo `.env`.
+
+---
+
 ## Sincronización Remota Automática (`sync.sh`)
 
 Si editas o agregas archivos desde tu portátil y el servidor homelab está en tu red local, puedes sincronizar y re-indexar en un solo comando:
