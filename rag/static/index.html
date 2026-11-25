@@ -215,24 +215,67 @@
     .history-item.active .history-del { color: var(--on-accent); }
     .history-item.active .history-del:hover { background: rgba(255, 255, 255, 0.2); color: var(--on-accent); }
 
-    .sources-filter { border-top: 1px solid var(--separator); padding-top: 0.875rem; }
-
-    .chips { display: flex; flex-wrap: wrap; gap: 0.375rem; padding: 0.25rem 0.5rem 0; }
-
-    .chip {
-      padding: 0.25rem 0.625rem;
-      border-radius: 999px;
-      background: var(--fill);
-      font-size: 0.75rem;
-      font-weight: 510;
-      letter-spacing: 0.005em;
-      max-width: 100%;
-      overflow: hidden;
-      text-overflow: ellipsis;
-      white-space: nowrap;
+    .sources-filter {
+      border-top: 1px solid var(--separator);
+      padding-top: 0.875rem;
+      display: flex;
+      flex-direction: column;
+      min-height: 0;
+      max-height: 42%;
     }
-    .chip:hover { background: var(--fill-2); box-shadow: inset 0 0 0 1px var(--separator); }
-    .chip[aria-pressed="true"] { background: var(--selection); color: var(--on-accent); box-shadow: none; }
+
+    .tree {
+      overflow-y: auto;
+      min-height: 0;
+      margin: 0 -0.25rem;
+      padding: 0 0.25rem;
+      overscroll-behavior: contain;
+    }
+    .tree-group { display: grid; grid-template-rows: 0fr; transition: grid-template-rows var(--spring-dur) var(--spring); }
+    .tree-group.open { grid-template-rows: 1fr; }
+    .tree-group > div { overflow: hidden; min-height: 0; }
+
+    .tree-row {
+      display: flex;
+      align-items: center;
+      border-radius: var(--radius-s);
+      padding-left: calc(var(--depth, 0) * 0.875rem);
+    }
+    .tree-row:hover { background: var(--fill-2); }
+    .tree-row.selected { background: var(--selection); color: var(--on-accent); }
+
+    .tree-toggle {
+      width: 1.375rem;
+      height: 1.75rem;
+      display: grid;
+      place-items: center;
+      color: var(--label-3);
+      flex-shrink: 0;
+      font-size: 0.6875rem;
+    }
+    .tree-toggle .icon { transition: transform var(--spring-dur) var(--spring); }
+    .tree-toggle[aria-expanded="true"] .icon { transform: rotate(90deg); }
+    .tree-toggle:hover { color: var(--label); }
+    .tree-row.selected .tree-toggle { color: rgba(255, 255, 255, 0.85); }
+    .tree-spacer { width: 1.375rem; flex-shrink: 0; }
+
+    .tree-select {
+      flex: 1;
+      min-width: 0;
+      display: flex;
+      align-items: center;
+      gap: 0.4375rem;
+      padding: 0.3125rem 0.5rem 0.3125rem 0.125rem;
+      border-radius: var(--radius-s);
+      font-size: 0.8125rem;
+      letter-spacing: 0.005em;
+      text-align: left;
+    }
+    .tree-select .icon { color: var(--accent); font-size: 0.9375rem; }
+    .tree-row.selected .tree-select .icon { color: inherit; }
+    .tree-name { flex: 1; min-width: 0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+    .tree-count { font-size: 0.6875rem; color: var(--label-3); font-variant-numeric: tabular-nums; }
+    .tree-row.selected .tree-count { color: rgba(255, 255, 255, 0.75); }
 
     /* ---------- Contenido ---------- */
     main {
@@ -715,7 +758,7 @@
 
     @media (prefers-contrast: more) {
       :root { --separator: rgba(60, 60, 67, 0.5); --label-2: var(--label); --label-3: rgba(60, 60, 67, 0.8); }
-      .composer, .toast, .sources, .chip { box-shadow: inset 0 0 0 1px var(--label); }
+      .composer, .toast, .sources { box-shadow: inset 0 0 0 1px var(--label); }
     }
   </style>
 </head>
@@ -732,6 +775,8 @@
       <symbol id="i-check" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="m5 12.5 4.5 4.5L19 7.5"/></symbol>
       <symbol id="i-chev" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="m9 6 6 6-6 6"/></symbol>
       <symbol id="i-lock" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><rect x="5" y="10.5" width="14" height="10" rx="2.5"/><path d="M8 10.5V8a4 4 0 0 1 8 0v2.5"/></symbol>
+      <symbol id="i-folder" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linejoin="round"><path d="M3.5 7.5A2 2 0 0 1 5.5 5.5h4l2 2h7a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2h-13a2 2 0 0 1-2-2z"/></symbol>
+      <symbol id="i-stack" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><path d="m12 4 8.5 4.5L12 13 3.5 8.5z"/><path d="m3.5 12.5 8.5 4.5 8.5-4.5"/><path d="m3.5 16.5 8.5 4.5 8.5-4.5"/></symbol>
       <symbol id="i-doc" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><path d="M14 3.5H7.5A2 2 0 0 0 5.5 5.5v13a2 2 0 0 0 2 2h9a2 2 0 0 0 2-2V8z"/><path d="M14 3.5V8h4.5"/></symbol>
     </defs>
   </svg>
@@ -756,7 +801,7 @@
 
     <div class="sources-filter">
       <div class="section-head" id="filter-label">Buscar en</div>
-      <div class="chips" id="chips" role="group" aria-labelledby="filter-label"></div>
+      <div class="tree" id="tree" role="tree" aria-labelledby="filter-label"></div>
     </div>
   </aside>
 
@@ -780,7 +825,7 @@
       <form class="composer" id="composer">
         <div class="composer-scope" id="scope">
           <span id="scope-name"></span>
-          <button type="button" id="scope-clear" aria-label="Buscar en todas las fuentes">
+          <button type="button" id="scope-clear" aria-label="Buscar en todos los documentos">
             <svg class="icon" style="font-size:.75rem"><use href="#i-x"/></svg>
           </button>
         </div>
@@ -808,11 +853,14 @@
       activeId: null,
       folder: ALL,
       controller: null,    // AbortController de la respuesta en curso
+      folders: [],         // [{ path, files }] desde /api/folders
+      expanded: new Set(), // carpetas desplegadas en el árbol
     };
+    const PREFS_KEY = "tu_archivo_prefs";
 
     const $ = (id) => document.getElementById(id);
     const els = {
-      history: $("history"), chips: $("chips"), thread: $("thread"), scroll: $("scroll"),
+      history: $("history"), tree: $("tree"), thread: $("thread"), scroll: $("scroll"),
       topbar: $("topbar"), topbarTitle: $("topbar-title"), input: $("input"), send: $("btn-send"),
       composer: $("composer"), scope: $("scope"), scopeName: $("scope-name"), toast: $("toast"),
       toastText: $("toast-text"),
@@ -881,39 +929,152 @@
       }
     }
 
-    async function loadSources() {
-      let sources = [];
+    // ---------- Árbol de carpetas ("Buscar en") ----------
+    function savePrefs() {
       try {
-        const res = await fetch("/api/sources");
-        sources = ((await res.json()).sources || []).filter((s) => s !== ALL);
+        localStorage.setItem(PREFS_KEY, JSON.stringify({ folder: state.folder, expanded: [...state.expanded] }));
+      } catch (e) { /* almacenamiento no disponible */ }
+    }
+
+    function loadPrefs() {
+      try {
+        const prefs = JSON.parse(localStorage.getItem(PREFS_KEY) || "{}");
+        state.expanded = new Set(prefs.expanded || []);
+        return prefs.folder || ALL;
       } catch (e) {
-        console.error("Error cargando fuentes:", e);
-      }
-      renderChips(sources);
-    }
-
-    function renderChips(sources) {
-      els.chips.innerHTML = "";
-      for (const src of [ALL, ...sources]) {
-        const chip = document.createElement("button");
-        chip.type = "button";
-        chip.className = "chip pressable";
-        chip.textContent = src === ALL ? "Todo" : src;
-        chip.title = src === ALL ? "Todas las fuentes" : src;
-        chip.dataset.source = src;
-        chip.setAttribute("aria-pressed", String(src === state.folder));
-        chip.addEventListener("click", () => setFolder(src));
-        els.chips.appendChild(chip);
+        return ALL;
       }
     }
 
-    function setFolder(folder) {
+    async function loadFolders() {
+      try {
+        const res = await fetch("/api/folders");
+        state.folders = (await res.json()).folders || [];
+      } catch (e) {
+        console.error("Error cargando carpetas:", e);
+        state.folders = [];
+      }
+      // Si la carpeta guardada ya no existe en el índice, volver a "Todo"
+      if (state.folder !== ALL && !state.folders.some((f) => f.path === state.folder)) state.folder = ALL;
+      renderTree();
+      setFolder(state.folder, { scroll: true });
+    }
+
+    function buildTree() {
+      const root = { path: ALL, children: [] };
+      const nodes = new Map([["", root]]);
+      for (const { path, files } of state.folders) {
+        nodes.set(path, { path, files, name: path.split("/").pop(), children: [] });
+      }
+      for (const { path } of state.folders) {
+        const parent = path.includes("/") ? path.slice(0, path.lastIndexOf("/")) : "";
+        (nodes.get(parent) || root).children.push(nodes.get(path));
+      }
+      return root;
+    }
+
+    function treeRow(node, depth) {
+      const isAll = node.path === ALL;
+      const hasChildren = node.children?.length > 0;
+      const row = document.createElement("div");
+      row.className = "tree-row";
+      row.style.setProperty("--depth", depth);
+      row.dataset.path = node.path;
+      row.setAttribute("role", "treeitem");
+      row.setAttribute("aria-level", String(depth + 1));
+
+      if (hasChildren && !isAll) {
+        const toggle = document.createElement("button");
+        toggle.type = "button";
+        toggle.className = "tree-toggle";
+        toggle.setAttribute("aria-label", `Mostrar subcarpetas de ${node.name}`);
+        toggle.setAttribute("aria-expanded", String(state.expanded.has(node.path)));
+        toggle.innerHTML = icon("chev");
+        toggle.addEventListener("click", () => toggleFolder(node.path));
+        row.appendChild(toggle);
+        row.setAttribute("aria-expanded", String(state.expanded.has(node.path)));
+      } else {
+        row.appendChild(Object.assign(document.createElement("span"), { className: "tree-spacer" }));
+      }
+
+      const select = document.createElement("button");
+      select.type = "button";
+      select.className = "tree-select";
+      select.title = isAll ? "Buscar en todos los documentos" : node.path;
+      const total = state.folders.filter((f) => !f.path.includes("/")).reduce((n, f) => n + f.files, 0);
+      select.innerHTML = `
+        ${icon(isAll ? "stack" : "folder")}
+        <span class="tree-name"></span>
+        <span class="tree-count">${isAll ? (total || "") : node.files}</span>`;
+      select.querySelector(".tree-name").textContent = isAll ? "Todos los documentos" : node.name;
+      select.addEventListener("click", () => setFolder(node.path));
+      select.addEventListener("keydown", (e) => {
+        if (!hasChildren || isAll) return;
+        if (e.key === "ArrowRight" && !state.expanded.has(node.path)) { e.preventDefault(); toggleFolder(node.path); }
+        if (e.key === "ArrowLeft" && state.expanded.has(node.path)) { e.preventDefault(); toggleFolder(node.path); }
+      });
+      row.appendChild(select);
+      return row;
+    }
+
+    function renderBranch(container, nodes, depth) {
+      for (const node of nodes) {
+        container.appendChild(treeRow(node, depth));
+        if (node.children.length) {
+          const group = document.createElement("div");
+          group.className = "tree-group" + (state.expanded.has(node.path) ? " open" : "");
+          group.dataset.parent = node.path;
+          group.setAttribute("role", "group");
+          const inner = document.createElement("div");
+          renderBranch(inner, node.children, depth + 1);
+          group.appendChild(inner);
+          container.appendChild(group);
+        }
+      }
+    }
+
+    function renderTree() {
+      els.tree.innerHTML = "";
+      const root = buildTree();
+      els.tree.appendChild(treeRow({ path: ALL }, 0));
+      renderBranch(els.tree, root.children, 0);
+      markSelected();
+    }
+
+    function toggleFolder(path, open = !state.expanded.has(path)) {
+      open ? state.expanded.add(path) : state.expanded.delete(path);
+      const group = els.tree.querySelector(`.tree-group[data-parent="${CSS.escape(path)}"]`);
+      group?.classList.toggle("open", open);
+      const row = els.tree.querySelector(`.tree-row[data-path="${CSS.escape(path)}"]`);
+      row?.setAttribute("aria-expanded", String(open));
+      row?.querySelector(".tree-toggle")?.setAttribute("aria-expanded", String(open));
+      savePrefs();
+    }
+
+    function markSelected() {
+      for (const row of els.tree.querySelectorAll(".tree-row")) {
+        const selected = row.dataset.path === state.folder;
+        row.classList.toggle("selected", selected);
+        row.setAttribute("aria-selected", String(selected));
+      }
+    }
+
+    const folderName = (path) => path === ALL ? "Todos los documentos" : path.split("/").pop();
+
+    function setFolder(folder, { scroll = false } = {}) {
       state.folder = folder;
-      for (const chip of els.chips.children) chip.setAttribute("aria-pressed", String(chip.dataset.source === folder));
+      // Desplegar los ancestros para que la selección quede a la vista
+      if (folder !== ALL) {
+        const parts = folder.split("/");
+        for (let i = 1; i < parts.length; i++) toggleFolder(parts.slice(0, i).join("/"), true);
+      }
+      markSelected();
+      if (scroll) els.tree.querySelector(".tree-row.selected")?.scrollIntoView({ block: "nearest" });
       // El filtro se muestra junto al campo que afecta
       els.scope.classList.toggle("on", folder !== ALL);
-      els.scopeName.textContent = folder;
+      els.scopeName.textContent = folderName(folder);
       els.scope.title = `Buscando sólo en ${folder}`;
+      savePrefs();
     }
 
     // Hoja lateral en ventanas angostas
@@ -1036,6 +1197,12 @@
         <div class="entry-actions"></div>
         <div class="entry-sources"></div>`;
       el.querySelector(".entry-q").textContent = entry.question;
+      if (entry.folder) {
+        const where = document.createElement("span");
+        where.textContent = ` · en ${folderName(entry.folder)}`;
+        where.title = entry.folder;
+        el.querySelector(".entry-meta").appendChild(where);
+      }
       return el;
     }
 
@@ -1172,7 +1339,7 @@
         { role: "assistant", content: it.answer || "" },
       ]);
 
-      const entry = { id: "e-" + Date.now(), question, answer: "", sources: [], timestamp };
+      const entry = { id: "e-" + Date.now(), question, answer: "", sources: [], timestamp, folder: state.folder === ALL ? null : state.folder };
       conv.entries.push(entry);
       renderHistory();
 
@@ -1203,7 +1370,7 @@
         const res = await fetch("/api/chat", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ question, source: state.folder === ALL ? null : state.folder, top_k: 7, messages }),
+          body: JSON.stringify({ question, source: entry.folder, top_k: 7, messages }),
           signal: controller.signal,
         });
         if (!res.ok || !res.body) throw new Error(`HTTP ${res.status}`);
@@ -1259,8 +1426,9 @@
     document.addEventListener("keydown", (e) => { if (e.key === "Escape") closeSidebar(); });
 
     load();
-    renderChips([]);
-    loadSources();
+    state.folder = loadPrefs();
+    renderTree();
+    loadFolders();
     if (state.conversations.length) openConversation(state.conversations[0].id);
     else { renderHistory(); renderWelcome(); }
     autosize();

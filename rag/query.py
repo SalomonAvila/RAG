@@ -33,7 +33,7 @@ Pautas de respuesta:
 1. Relevancia estricta y enfoque: Responde de forma precisa y directa ÚNICAMENTE a lo que el usuario preguntó. Si parte del contexto recuperado no tiene relación directa con la pregunta formulada, ignórala por completo y jamás agregues resúmenes o explicaciones de temas no solicitados.
 2. Proporcionalidad: Si la pregunta es puntual, breve o específica, responde de forma concisa sin rodeos. Si la pregunta es amplia, metodológica o de arquitectura técnica, desarrolla la respuesta con la estructura y profundidad adecuadas.
 3. Precisión estricta: Basa todas tus afirmaciones exclusivamente en los fragmentos relevantes del contexto. Cita las fuentes [n] justo después de cada dato o idea extraída.
-4. Honestidad: Si el contexto no contiene información suficiente para responder con certeza a lo preguntado, indícalo brevemente y con total transparencia sin especular ni rellenar.
+4. Honestidad: Si el contexto no contiene información suficiente para responder con certeza a lo preguntado, indícalo brevemente y con total transparencia sin especular ni rellenar. Si la información es parcial, presenta primero todo lo que el contexto sí dice sobre el tema (con sus citas) y sólo después aclara qué falta; nunca respondas que "no hay detalles" cuando el contexto contiene datos relacionados.
 5. Secciones: Los fragmentos pueden empezar o terminar a mitad de una sección. Atribuye cada dato únicamente a la sección indicada en su línea "Sección:" y nunca mezcles contenido de secciones distintas bajo un mismo título.
 6. Siglas: No expandas siglas ni inventes definiciones que no aparezcan en el contexto.
 7. Visión general: Si el contexto incluye el "Índice del documento", úsalo para describir de qué trata el documento cuando la pregunta sea amplia (p.ej. "¿qué dice X?"), y complementa con los fragmentos."""
@@ -103,6 +103,8 @@ class _Corpus:
     avg_len: float
     folders: list[str]
     sources: list[str]
+    paths: list[str]
+    dir_files: dict[str, int]  # carpeta -> nº de archivos indexados dentro (recursivo)
     stems: dict[str, frozenset[str]]  # ruta -> tokens del nombre del archivo
     loaded_at: float
 
@@ -157,12 +159,21 @@ def get_corpus(qdrant: QdrantClient) -> _Corpus:
     if sum(len(f) + 3 for f in folders) > ROUTER_CATALOG_CHARS:
         folders = _folder_catalog(paths, depth=1)
 
+    dir_files: dict[str, int] = {}
+    for path in paths:
+        parts = path.split("/")[:-1]
+        for i in range(1, len(parts) + 1):
+            folder = "/".join(parts[:i])
+            dir_files[folder] = dir_files.get(folder, 0) + 1
+
     _corpus = _Corpus(
         points=points,
         df=df,
         avg_len=(sum(len(t) for _, t in points) / len(points)) if points else 1.0,
         folders=folders,
         sources=sorted(sources),
+        paths=sorted(paths),
+        dir_files=dir_files,
         stems={path: frozenset(_extract_tokens(PurePosixPath(path).stem)) for path in paths},
         loaded_at=now,
     )
@@ -213,7 +224,7 @@ Carpetas disponibles:
 
 Instrucciones:
 1. DOCS: indica qué carpetas de la lista tienen relación directa con la consulta (copia los nombres exactos). Si es transversal responde 'TODOS'.
-2. EXPANSION: genera de 6 a 12 términos clave y sinónimos con los que esta información suele estar redactada en los documentos (por ejemplo, para calificación: evaluación, parciales, quices, talleres, proyecto, porcentajes, ponderación; para arquitectura: módulos, servicios, contratos, diagramas).
+2. EXPANSION: genera de 6 a 12 términos clave y sinónimos con los que esta información suele estar redactada en los documentos (por ejemplo, para calificación: evaluación, exámenes, parciales, porcentajes, ponderación; para costos: precio, presupuesto, tarifa, gastos; para arquitectura: módulos, servicios, contratos, diagramas).
 {consulta_rule}
 Responde ÚNICAMENTE en este formato:
 {consulta_fmt}DOCS: [carpetas separadas por coma, o 'TODOS']
@@ -223,7 +234,8 @@ EXPANSION: [términos separados por espacio]"""
         resp = llm.chat(
             model=config.LLM_MODEL,
             messages=[{"role": "user", "content": prompt}],
-            options={**llm_options(), "temperature": 0, "num_predict": 200},
+            # Semilla fija: la misma pregunta debe expandirse (y recuperar) siempre igual.
+            options={**llm_options(), "temperature": 0, "seed": 42, "num_predict": 200},
             keep_alive=config.OLLAMA_KEEP_ALIVE,
         )
     except Exception as e:
@@ -254,7 +266,7 @@ def _in_folders(payload: dict, folders: list[str]) -> bool:
 
 
 def _bm25(
-    corpus: _Corpus, query: str, source: str | None, path: str | None, folders: list[str], limit: int
+    corpus: _Corpus, query: str, scope: set[str] | None, path: str | None, folders: list[str], limit: int
 ) -> list[qm.Record]:
     query_tokens = _extract_tokens(query)
     N = len(corpus.points)
@@ -262,7 +274,7 @@ def _bm25(
     scored = []
     for p, toks in corpus.points:
         payload = p.payload or {}
-        if (source and payload.get("source") != source) or (path and payload.get("path") != path):
+        if (scope is not None and payload.get("path") not in scope) or (path and payload.get("path") != path):
             continue
         freqs: dict[str, int] = {}
         for t in toks:
@@ -301,7 +313,9 @@ def warm_up_reranker() -> None:
     _get_reranker()
 
 
-def _rerank(question: str, candidates: list[qm.ScoredPoint], top_k: int) -> list[qm.ScoredPoint] | None:
+def _rerank(
+    question: str, candidates: list[qm.ScoredPoint], top_k: int, folders: list[str]
+) -> list[qm.ScoredPoint] | None:
     """Reordena con un cross-encoder y corta por relevancia relativa. None si no hay reranker."""
     model = _get_reranker()
     if model is None or not candidates:
@@ -312,13 +326,18 @@ def _rerank(question: str, candidates: list[qm.ScoredPoint], top_k: int) -> list
         for pt in candidates
     ]
     logits = list(model.rerank(question, docs, batch_size=len(docs)))
-    probs = [1.0 / (1.0 + math.exp(-x)) for x in logits]
+    probs = [
+        (1.0 / (1.0 + math.exp(-x))) * (1.0 if not folders or _in_folders(pt.payload or {}, folders) else config.ROUTE_PENALTY)
+        for x, pt in zip(logits, candidates)
+    ]
     ranked = sorted(zip(probs, candidates), key=lambda x: x[0], reverse=True)
     best = ranked[0][0]
+    if best < config.RERANK_MIN_SCORE:
+        return []
     return [
         qm.ScoredPoint(id=pt.id, version=0, score=prob, payload=pt.payload, vector=None)
-        for prob, pt in ranked[:top_k]
-        if prob >= best * config.RERANK_KEEP_RATIO
+        for i, (prob, pt) in enumerate(ranked[:top_k])
+        if i < config.RERANK_MIN_KEEP or prob >= best * config.RERANK_KEEP_RATIO
     ]
 
 
@@ -344,14 +363,14 @@ OUTLINE_CHARS = 3000
 _OUTLINE_HEADING = re.compile(r"^(=+|#{1,6})\s+(.+?)\s*#*\s*$")
 
 
-def _target_file(corpus: _Corpus, question: str) -> str | None:
-    """Archivo nombrado explícitamente en la pregunta ("¿qué dice arch-description?").
+def _target_file(corpus: _Corpus, question: str, scope: set[str] | None) -> str | None:
+    """Archivo nombrado explícitamente en la pregunta ("¿qué dice guia-instalacion?").
     Exige que todos los tokens del nombre aparezcan y que el nombre sea distintivo."""
     q_tokens = set(_extract_tokens(question))
     matches = [
         path
         for path, stem in corpus.stems.items()
-        if stem and sum(len(t) for t in stem) >= 6 and stem <= q_tokens
+        if stem and sum(len(t) for t in stem) >= 6 and stem <= q_tokens and (scope is None or path in scope)
     ]
     if not matches:
         return None
@@ -408,13 +427,24 @@ def search(
     1. Router LLM: reescribe preguntas de seguimiento, elige carpetas y expande la consulta.
     2. Búsqueda densa (Qdrant) + BM25 en memoria, fusionadas con RRF (k=15).
     3. Reranker cross-encoder sobre los mejores candidatos (o corte por RRF si no hay reranker).
+
+    `source` limita la búsqueda a una carpeta de cualquier nivel ("Apuntes" o
+    "Apuntes/Calculo"), relativa a RAG_SOURCE_DIR.
     """
     corpus = get_corpus(qdrant)
-    # Si la pregunta nombra un archivo concreto, se busca sólo dentro de él y se añade su índice.
-    target = _target_file(corpus, question)
     conditions = []
+    scope: set[str] | None = None
+    router_folders = corpus.folders
     if source:
-        conditions.append(qm.FieldCondition(key="source", match=qm.MatchValue(value=source)))
+        prefix = source.strip("/")
+        scope = {p for p in corpus.paths if p.startswith(prefix + "/")}
+        if not scope:
+            return []
+        conditions.append(qm.FieldCondition(key="path", match=qm.MatchAny(any=sorted(scope))))
+        # El router sólo elige entre subcarpetas del alcance
+        router_folders = [f for f in corpus.folders if f.startswith(prefix + "/")]
+    # Si la pregunta nombra un archivo concreto, se busca sólo dentro de él y se añade su índice.
+    target = _target_file(corpus, question, scope)
     if target:
         conditions.append(qm.FieldCondition(key="path", match=qm.MatchValue(value=target)))
     base_filter = qm.Filter(must=conditions) if conditions else None
@@ -437,13 +467,18 @@ def search(
     # ("¿y la segunda?" no tiene términos propios); sin historial, la guarda va primero
     # para ahorrarse el llamado al LLM.
     if history:
-        route = _route(llm, question, corpus.folders, history)
+        route = _route(llm, question, router_folders, history)
         if not has_evidence(route.standalone_question):
             return []
     else:
+        route = None
         if not has_evidence(question):
-            return []
-        route = _route(llm, question, corpus.folders, history)
+            # La pregunta literal puede no compartir palabras con los documentos
+            # ("calificación" vs. "Evaluación"): se reintenta con la expansión del router.
+            route = _route(llm, question, router_folders, history)
+            if not has_evidence(route.expanded_query):
+                return []
+        route = route or _route(llm, question, router_folders, history)
 
     candidate_depth = max(top_k * 5, 40)
     vector_results = qdrant.query_points(
@@ -455,7 +490,7 @@ def search(
     ).points
     top_vector_score = vector_results[0].score if vector_results else 0.0
 
-    bm25_results = _bm25(corpus, route.expanded_query, source, target, route.folders, candidate_depth)
+    bm25_results = _bm25(corpus, route.expanded_query, scope, target, route.folders, candidate_depth)
     if not bm25_results and top_vector_score < config.NOISE_FLOOR:
         return []
 
@@ -476,14 +511,27 @@ def search(
     if use_reranker:
         candidates = [points_by_id[pid] for pid, _ in sorted_ranks[: config.RERANK_CANDIDATES]]
         # Con la consulta expandida: la pregunta literal ("calificación") no se parece al
-        # texto fuente ("Evaluación • 2 Parciales (20%)"); los términos del router cierran esa brecha.
-        results = _rerank(route.expanded_query, candidates, top_k)
+        # texto fuente ("Evaluación: 2 exámenes (20%)"); los términos del router cierran esa brecha.
+        results = _rerank(route.expanded_query, candidates, top_k, route.folders)
     if results is None:
         results = _rrf_cutoff(sorted_ranks, points_by_id, top_k)
 
     if target and (outline := _outline_point(corpus, target)):
         results = [outline] + results
     return results
+
+
+def connect_qdrant() -> QdrantClient:
+    """Cliente de Qdrant; termina con un mensaje claro si no está disponible."""
+    qdrant = QdrantClient(url=config.QDRANT_URL, prefer_grpc=True, check_compatibility=False)
+    try:
+        qdrant.get_collections()
+    except Exception:
+        raise SystemExit(
+            f"No se pudo conectar a Qdrant en {config.QDRANT_URL}.\n"
+            "¿Está corriendo (docker compose up -d) o está abierto el túnel SSH hacia el servidor?"
+        )
+    return qdrant
 
 
 def location_detail(p: dict) -> str:
@@ -559,13 +607,13 @@ def main() -> None:
     parser = argparse.ArgumentParser(description="Pregúntale a tus repos y documentos.")
     parser.add_argument("pregunta", nargs="*", help="Pregunta (si se omite, modo interactivo)")
     parser.add_argument("-k", type=int, default=6, help="Fragmentos a recuperar (default: 6)")
-    parser.add_argument("-s", "--source", help="Filtrar por fuente (primera carpeta en RAG_SOURCE_DIR)")
+    parser.add_argument("-s", "--source", help="Buscar sólo en esta carpeta (p.ej. 'Apuntes/Calculo')")
     parser.add_argument("-m", "--model", default=config.LLM_MODEL, help="Modelo de Ollama para responder")
     parser.add_argument("--solo-buscar", action="store_true", help="Sólo mostrar fragmentos, sin LLM")
     parser.add_argument("--sin-reranker", action="store_true", help="Desactivar el reranker (sólo RRF)")
     args = parser.parse_args()
 
-    qdrant = QdrantClient(url=config.QDRANT_URL, prefer_grpc=True, check_compatibility=False)
+    qdrant = connect_qdrant()
     llm = ollama.Client(host=config.OLLAMA_URL)
 
     if args.pregunta:

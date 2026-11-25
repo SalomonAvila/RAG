@@ -66,6 +66,9 @@ def run_app():
 
     win.connect("destroy", Gtk.main_quit)
 
+    # App local: sin caché en disco, así nunca muestra una versión vieja de la interfaz.
+    WebKit2.WebContext.get_default().set_cache_model(WebKit2.CacheModel.DOCUMENT_VIEWER)
+
     webview = WebKit2.WebView()
     settings = webview.get_settings()
     settings.set_enable_javascript(True)

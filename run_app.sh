@@ -1,5 +1,6 @@
 #!/usr/bin/env bash
-# Inicia el motor RAG y abre "Tu Archivo" como aplicación nativa de escritorio en Fedora GNOME.
+# Abre "Tu Archivo" como aplicación de escritorio (GTK/WebKitGTK), conectada por túnel SSH
+# al servidor donde corren Qdrant y Ollama (RAG_REMOTE_HOST en .env).
 set -e
 
 DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
@@ -11,9 +12,9 @@ if [ -f "$DIR/.env" ]; then
   set +a
 fi
 
-echo "🔄 0. Verificando actualizaciones en GitHub..."
-if git rev-parse --is-inside-work-tree >/dev/null 2>&1; then
-  git pull origin main || echo "⚠️ Advertencia: No se pudo hacer git pull, continuando..."
+if [ "${RAG_AUTO_UPDATE:-0}" = "1" ] && git rev-parse --is-inside-work-tree >/dev/null 2>&1; then
+  echo "🔄 0. Actualizando el repositorio (RAG_AUTO_UPDATE=1)..."
+  git pull --ff-only || echo "⚠️ No se pudo actualizar (¿sin internet o cambios locales?), continuando..."
 fi
 
 # Mantener sincronizado el icono del sistema con el que esté en el repo
@@ -23,8 +24,12 @@ if [ -f "$DIR/rag/static/logo.png" ]; then
   cp "$DIR/rag/static/logo.png" "$HOME/.local/share/icons/hicolor/512x512/apps/tu-archivo.png" 2>/dev/null || true
 fi
 
-REMOTE_HOST="${RAG_REMOTE_HOST:-192.168.80.85}"
-REMOTE_USER="${RAG_REMOTE_USER:-homelab}"
+if [ -z "${RAG_REMOTE_HOST:-}" ]; then
+  echo "❌ Define RAG_REMOTE_HOST en .env (copia .env.example como punto de partida)." >&2
+  exit 1
+fi
+REMOTE_HOST="$RAG_REMOTE_HOST"
+REMOTE_USER="${RAG_REMOTE_USER:-$USER}"
 PORT_QDRANT=6334
 PORT_OLLAMA=11434
 

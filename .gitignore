@@ -14,3 +14,11 @@ wheels/
 qdrant_storage/
 .cocoindex_db/
 data/
+
+# Skills de agentes instaladas localmente
+.agents/
+.claude/
+skills-lock.json
+
+# Casos de evaluación propios (dependen de tus documentos)
+eval/casos.local.json

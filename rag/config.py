@@ -38,8 +38,16 @@ NOISE_FLOOR = float(os.getenv("NOISE_FLOOR", "0.64"))
 # RERANK_MODEL vacío lo desactiva y se usa sólo la fusión RRF.
 RERANK_MODEL = os.getenv("RERANK_MODEL", "BAAI/bge-reranker-v2-m3-int8")
 RERANK_CANDIDATES = int(os.getenv("RERANK_CANDIDATES", "8"))
-# Se conservan los fragmentos cuya probabilidad de relevancia sea >= este ratio de la mejor.
-RERANK_KEEP_RATIO = float(os.getenv("RERANK_KEEP_RATIO", "0.5"))
+# Se conservan los fragmentos cuya probabilidad de relevancia sea >= este ratio de la mejor,
+# y al menos RERANK_MIN_KEEP: un fragmento "imán" (p.ej. una portada que repite términos de
+# la pregunta) puede puntuar muy alto y no debe dejar al LLM sin el resto del contexto.
+RERANK_KEEP_RATIO = float(os.getenv("RERANK_KEEP_RATIO", "0.25"))
+RERANK_MIN_KEEP = int(os.getenv("RERANK_MIN_KEEP", "3"))
+# Si ni el mejor fragmento alcanza esta relevancia, no hay evidencia y no se responde con ruido.
+RERANK_MIN_SCORE = float(os.getenv("RERANK_MIN_SCORE", "0.05"))
+# Factor para fragmentos fuera de las carpetas que eligió el router: sólo sobreviven si
+# son muy relevantes. Evita que documentos de otro tema se cuelen por palabras comunes.
+ROUTE_PENALTY = float(os.getenv("ROUTE_PENALTY", "0.25"))
 
 # nomic-embed-text está entrenado con prefijos de tarea; usarlos mejora la búsqueda.
 DOC_PREFIX = "search_document: "

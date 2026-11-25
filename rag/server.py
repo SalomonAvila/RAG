@@ -38,6 +38,16 @@ app = FastAPI(title="Tu Archivo · RAG Local", lifespan=lifespan)
 STATIC_DIR = Path(__file__).resolve().parent / "static"
 app.mount("/static", StaticFiles(directory=STATIC_DIR), name="static")
 
+
+@app.middleware("http")
+async def revalidate_ui(request, call_next):
+    # La interfaz cambia con el repo: el navegador (y WebKitGTK) debe revalidarla siempre
+    # en vez de servir una copia vieja de su caché. Con ETag, si no cambió responde 304.
+    response = await call_next(request)
+    if request.url.path == "/" or request.url.path.startswith("/static/"):
+        response.headers["Cache-Control"] = "no-cache"
+    return response
+
 qdrant = QdrantClient(url=config.QDRANT_URL, prefer_grpc=True, check_compatibility=False)
 llm = ollama.Client(host=config.OLLAMA_URL)
 
@@ -63,6 +73,17 @@ def api_sources():
     except Exception:
         sources = []
     return {"sources": ["(Todos)"] + sources}
+
+
+@app.get("/api/folders")
+def api_folders():
+    """Árbol de carpetas indexadas: cada carpeta con su nº de archivos (recursivo)."""
+    try:
+        corpus = get_corpus(qdrant)
+        folders = [{"path": path, "files": n} for path, n in sorted(corpus.dir_files.items())]
+    except Exception:
+        folders = []
+    return {"folders": folders}
 
 
 def _sse(payload: dict) -> str:

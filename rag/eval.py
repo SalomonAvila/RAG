@@ -1,9 +1,12 @@
 """
 Evaluación de la recuperación: mide si los fragmentos esperados aparecen en los resultados.
 
-Cada caso de eval/casos.json tiene una pregunta y uno o más fragmentos esperados
-("ruta" = parte de la ruta del archivo; "pagina" opcional para PDFs). Un caso acierta si
+Cada caso tiene una pregunta y uno o más fragmentos esperados ("ruta" = parte de la ruta
+del archivo, relativa a RAG_SOURCE_DIR; "pagina" opcional para PDFs). Un caso acierta si
 algún resultado contiene algún esperado.
+
+Los casos dependen de tus documentos: copia eval/casos.ejemplo.json a eval/casos.local.json
+(ignorado por git) y escribe ahí preguntas reales cuya respuesta conozcas.
 
 Uso:
     uv run python -m rag.eval                  # con reranker
@@ -19,12 +22,12 @@ import time
 from pathlib import Path
 
 import ollama
-from qdrant_client import QdrantClient
 
 from rag import config
-from rag.query import _location, search
+from rag.query import _location, connect_qdrant, search
 
-DEFAULT_CASES = config.REPO_ROOT / "eval" / "casos.json"
+DEFAULT_CASES = config.REPO_ROOT / "eval" / "casos.local.json"
+EXAMPLE_CASES = config.REPO_ROOT / "eval" / "casos.ejemplo.json"
 
 
 def _matches(payload: dict, expected: dict) -> bool:
@@ -46,8 +49,14 @@ def main() -> None:
     parser.add_argument("-v", "--verbose", action="store_true")
     args = parser.parse_args()
 
+    if not args.casos.exists():
+        raise SystemExit(
+            f"No existe {args.casos}.\n"
+            f"Copia la plantilla y escribe preguntas sobre tus documentos:\n"
+            f"    cp {EXAMPLE_CASES.relative_to(config.REPO_ROOT)} {DEFAULT_CASES.relative_to(config.REPO_ROOT)}"
+        )
     cases = json.loads(args.casos.read_text())
-    qdrant = QdrantClient(url=config.QDRANT_URL, prefer_grpc=True, check_compatibility=False)
+    qdrant = connect_qdrant()
     llm = ollama.Client(host=config.OLLAMA_URL)
 
     hits, reciprocal_ranks, n_results, latencies = 0, [], [], []

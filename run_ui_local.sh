@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
-# Inicia la interfaz web en tu portátil abriendo un túnel SSH hacia el homelab.
-# Esto canaliza las consultas a Qdrant y Ollama en la torre sin consumir GPU ni RAM local.
+# Inicia la interfaz web en tu equipo abriendo un túnel SSH hacia el servidor (RAG_REMOTE_HOST),
+# donde corren Qdrant y Ollama, sin consumir GPU ni RAM local.
 set -e
 
 DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
@@ -12,13 +12,17 @@ if [ -f "$DIR/.env" ]; then
   set +a
 fi
 
-echo "🔄 0. Sincronizando repositorio local con GitHub..."
-if git rev-parse --is-inside-work-tree >/dev/null 2>&1; then
-  git pull origin main || echo "⚠️ Advertencia: No se pudo hacer git pull (¿sin internet o cambios locales?), continuando..."
+if [ "${RAG_AUTO_UPDATE:-0}" = "1" ] && git rev-parse --is-inside-work-tree >/dev/null 2>&1; then
+  echo "🔄 0. Actualizando el repositorio (RAG_AUTO_UPDATE=1)..."
+  git pull --ff-only || echo "⚠️ No se pudo actualizar (¿sin internet o cambios locales?), continuando..."
 fi
 
-REMOTE_HOST="${RAG_REMOTE_HOST:-192.168.80.85}"
-REMOTE_USER="${RAG_REMOTE_USER:-homelab}"
+if [ -z "${RAG_REMOTE_HOST:-}" ]; then
+  echo "❌ Define RAG_REMOTE_HOST en .env (copia .env.example como punto de partida)." >&2
+  exit 1
+fi
+REMOTE_HOST="$RAG_REMOTE_HOST"
+REMOTE_USER="${RAG_REMOTE_USER:-$USER}"
 PORT_QDRANT=6334
 PORT_OLLAMA=11434
 
@@ -35,7 +39,7 @@ TUNNEL_PID=$(pgrep -f "ssh.*-L $PORT_QDRANT:localhost:$PORT_QDRANT.*$REMOTE_HOST
 trap 'echo ""; echo "🔌 Cerrando túnel SSH..."; kill $TUNNEL_PID 2>/dev/null || true' EXIT
 
 echo "🚀 2. Iniciando Aplicación Local (Tu Archivo)..."
-echo "🌐 Conectado de forma transparente al motor de GPU en $REMOTE_HOST."
+echo "🌐 Conectado a Qdrant y Ollama en $REMOTE_HOST."
 echo "👉 Abre en tu navegador: http://localhost:7860"
 echo ""
 

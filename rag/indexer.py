@@ -144,7 +144,7 @@ def _headings(text: str, language: str | None) -> list[tuple[int, int, str]]:
 
 
 def _section_at(headings: list[tuple[int, int, str]], line: int) -> str | None:
-    """Ruta de títulos vigente en una línea, p.ej. "Decisiones > ADR-04: Kafka"."""
+    """Ruta de títulos vigente en una línea, p.ej. "Diseño > Decisiones > Base de datos"."""
     stack: list[tuple[int, str]] = []
     for line_no, level, title in headings:
         if line_no > line:
@@ -185,7 +185,7 @@ async def process_chunk(
     text, removed = _strip_trailing_headings(chunk.text, language)
     section = _section_at(headings, chunk.start.line)
     # La ruta y la sección dan contexto a fragmentos que por sí solos son ambiguos
-    # ("Parcial 1: 20%", "Consecuencias positivas: ...").
+    # ("Examen final: 30%", "Ventajas: ...").
     embedding = await coco.use_context(EMBEDDER).embed(
         config.DOC_PREFIX + config.chunk_header(rel_path, section) + text
     )

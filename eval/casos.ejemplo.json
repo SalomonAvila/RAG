@@ -1,0 +1,17 @@
+[
+  {
+    "pregunta": "¿Cómo se evalúa el curso de cálculo?",
+    "esperado": [{"ruta": "Calculo/programa.pdf", "pagina": 3}]
+  },
+  {
+    "pregunta": "¿Cómo se valida el token en el servicio de autenticación?",
+    "esperado": [{"ruta": "mi-repo/src/auth/service.ts"}]
+  },
+  {
+    "pregunta": "¿Qué decisiones de arquitectura se tomaron sobre la base de datos?",
+    "esperado": [
+      {"ruta": "mi-repo/docs/arquitectura.md"},
+      {"ruta": "mi-repo/docs/decisiones.md"}
+    ]
+  }
+]
