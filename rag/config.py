@@ -19,6 +19,11 @@ QDRANT_URL = os.getenv("QDRANT_URL", "http://localhost:6334")
 QDRANT_COLLECTION = os.getenv("QDRANT_COLLECTION", "rag_docs")
 
 OLLAMA_URL = os.getenv("OLLAMA_URL", "http://localhost:11434")
+
+# Dónde escucha la interfaz web (rag.server). En la torre, con "tailscale serve" delante,
+# conviene RAG_HOST=127.0.0.1 para no exponerla sin autenticación en la LAN.
+SERVER_HOST = os.getenv("RAG_HOST", "0.0.0.0")
+SERVER_PORT = int(os.getenv("RAG_PORT", "7860"))
 EMBED_MODEL = os.getenv("EMBED_MODEL", "nomic-embed-text")
 LLM_MODEL = os.getenv("LLM_MODEL", "qwen2.5:7b")
 

@@ -1,0 +1,12 @@
+.git
+.venv
+.env
+.cocoindex_db
+qdrant_storage
+data
+eval
+.ruff_cache
+.agents
+.claude
+**/__pycache__
+*.py[oc]

@@ -38,9 +38,15 @@ rsync -avzP \
   "$SOURCE_DIR/" "$REMOTE_USER@$REMOTE_HOST:$REMOTE_DEST"
 
 echo ""
-echo "⚡ 2. Ejecutando la indexación incremental en el servidor..."
-ssh -F /dev/null -o BatchMode=yes "$REMOTE_USER@$REMOTE_HOST" \
-  "cd $REMOTE_REPO && ${REMOTE_UPDATE}uv run cocoindex update rag.indexer"
+if [ "${RAG_LIVE_INDEXER:-0}" = "1" ]; then
+  # En la torre corre el contenedor rag-indexer en modo live (homelab/services/rag): ya vio
+  # los cambios. Lanzar otro "cocoindex update" competiría con él por el estado (.cocoindex_db).
+  echo "⚡ 2. El indexador en vivo de la torre detecta los cambios solo (RAG_LIVE_INDEXER=1)."
+else
+  echo "⚡ 2. Ejecutando la indexación incremental en el servidor..."
+  ssh -F /dev/null -o BatchMode=yes "$REMOTE_USER@$REMOTE_HOST" \
+    "cd $REMOTE_REPO && ${REMOTE_UPDATE}uv run cocoindex update rag.indexer"
+fi
 
 
 echo ""

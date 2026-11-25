@@ -125,7 +125,7 @@ def api_chat(req: QueryRequest):
 
 
 def main():
-    uvicorn.run("rag.server:app", host="0.0.0.0", port=7860, reload=False)
+    uvicorn.run("rag.server:app", host=config.SERVER_HOST, port=config.SERVER_PORT, reload=False)
 
 
 if __name__ == "__main__":

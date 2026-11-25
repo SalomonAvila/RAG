@@ -36,7 +36,7 @@ _splitter = RecursiveSplitter()
 
 @coco.lifespan
 async def coco_lifespan(builder: coco.EnvironmentBuilder) -> AsyncIterator[None]:
-    builder.provide(QDRANT_DB, qdrant.create_client(config.QDRANT_URL, prefer_grpc=True))
+    builder.provide(QDRANT_DB, qdrant.create_client(config.QDRANT_URL, prefer_grpc=True, check_compatibility=False))
     builder.provide(
         EMBEDDER,
         LiteLLMEmbedder(
